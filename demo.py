@@ -8,5 +8,6 @@ model_name = "microsoft/phi-2"
 model = AutoModel.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+control_kwargs={}
 rep_reading_pipeline =  pipeline("rep-reading", model=model, tokenizer=tokenizer)
 rep_control_pipeline =  pipeline("rep-control", model=model, tokenizer=tokenizer, **control_kwargs)
