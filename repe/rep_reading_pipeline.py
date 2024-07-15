@@ -118,6 +118,10 @@ class RepReadingPipeline(Pipeline):
             batch_size: batch size to use when getting hidden states
             direction_method: string specifying the RepReader strategy for finding directions
             direction_finder_kwargs: kwargs to pass to RepReader constructor
+
+
+            #
+            The get_directions() function computes directions for each specified hidden layer.
         """
 
         if not isinstance(hidden_layers, list): 
@@ -138,8 +142,10 @@ class RepReadingPipeline(Pipeline):
             
             # get differences between pairs
             relative_hidden_states = {k: np.copy(v) for k, v in hidden_states.items()}
+            print('n_difference', n_difference)
             for layer in hidden_layers:
                 for _ in range(n_difference):
+                    # Given a set of stimuli S, we proceed to divide this set into pairs of stimuli, with each pair comprising two stimuli labeled as si and si+1.
                     relative_hidden_states[layer] = relative_hidden_states[layer][::2] - relative_hidden_states[layer][1::2]
 
 		# get the directions

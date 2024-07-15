@@ -1,7 +1,7 @@
 # wrapping classes
 import torch
 import numpy as np
-
+import copy
 class WrappedBlock(torch.nn.Module):
     def __init__(self, block):
         super().__init__()
@@ -11,8 +11,22 @@ class WrappedBlock(torch.nn.Module):
         self.mask = None
         self.token_pos = None
         self.normalize = False
+        self.lastoutput = None
 
     def forward(self, *args, **kwargs):
+        # print('Enter Forward')
+        # if hasattr(self, 'lastoutput') and self.lastoutput is not None:
+        
+        #     print('\n\nInput')
+        #     print(args)
+        #     print(kwargs.keys())
+        # if hasattr(self, 'lastoutput') and self.lastoutput is not None:
+        #     print(self.lastoutput[0])
+        #     print(args[0])
+        #     print(torch.allclose(self.lastoutput[0].to('cpu'), args[0].to('cpu')))
+
+        # else:
+        #     print('self.lastoutput is None')
         output = self.block(*args, **kwargs)
 
         if isinstance(output, tuple):
@@ -51,6 +65,7 @@ class WrappedBlock(torch.nn.Module):
             self.controller = self.controller.to(modified.device)
             if type(mask) == torch.Tensor:
                 mask = mask.to(modified.device)
+            print(modified.shape, modified[:, self.token_pos].shape, self.controller.shape)
             if isinstance(self.token_pos, int):
                 modified[:, self.token_pos] = self.operator(modified[:, self.token_pos], self.controller * mask)
             elif isinstance(self.token_pos, list) or isinstance(self.token_pos, tuple) or isinstance(self.token_pos, np.ndarray):
@@ -75,7 +90,12 @@ class WrappedBlock(torch.nn.Module):
             output = (modified,) + output[1:] 
         else:
             output = modified
-        
+
+        self.lastoutput = copy.copy(output)
+        # if hasattr(self, 'lastoutput') and self.lastoutput is not None:
+
+        #     print('== Output ==')
+        #     print(self.lastoutput)
         return output
 
     def set_controller(self, activations, token_pos=None, masks=None, normalize=False, operator='linear_comb'):
@@ -95,6 +115,7 @@ class WrappedBlock(torch.nn.Module):
                 raise NotImplementedError
         else:
             raise NotImplementedError(f"Operator {operator} not implemented.")
+        #  Where did they use the self.operator
         self.operator = op
         
     def reset(self):
@@ -141,6 +162,7 @@ class WrappedReadingVecModel(torch.nn.Module):
             return output
 
     def wrap(self, layer_id, block_name):
+        # setattr(object, name, value)
         assert block_name in BLOCK_NAMES
         if self.is_wrapped(self.model.model.layers[layer_id]):
             block = getattr(self.model.model.layers[layer_id].block, block_name)
@@ -207,7 +229,7 @@ class WrappedReadingVecModel(torch.nn.Module):
 
 
     def set_controller(self, layer_ids, activations, block_name='decoder_block', token_pos=None, masks=None, normalize=False, operator='linear_comb'):
-
+        print('set_controller')
         def _set_controller(layer_id, activations, block_name, masks, normalize, operator):
             current_layer = self.model.model.layers[layer_id]
 

@@ -137,16 +137,23 @@ class PCARepReader(RepReader):
     def get_rep_directions(self, model, tokenizer, hidden_states, hidden_layers, **kwargs):
         """Get PCA components for each layer"""
         directions = {}
-
+        # print('hidden')
         for layer in hidden_layers:
             H_train = hidden_states[layer]
+            # print(H_train.shape)
             H_train_mean = H_train.mean(axis=0, keepdims=True)
             self.H_train_means[layer] = H_train_mean
             H_train = recenter(H_train, mean=H_train_mean).cpu()
             H_train = np.vstack(H_train)
             pca_model = PCA(n_components=self.n_components, whiten=False).fit(H_train)
-
+            # PCA.components_
+            # ndarray of shape (n_components, n_features)
+            # Principal axes in feature space, representing the directions of maximum variance in the data. Equivalently, the right singular vectors of the centered input data, parallel to its eigenvectors. The components are sorted by decreasing explained_variance_.
             directions[layer] = pca_model.components_ # shape (n_components, n_features)
+            
+            # print('directions', directions[layer].shape) 
+            # directions (1, 4096)
+            
             self.n_components = pca_model.n_components_
         
         return directions
