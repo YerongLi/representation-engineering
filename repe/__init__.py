@@ -3,6 +3,7 @@ warnings.filterwarnings("ignore")
 
 
 from .pipelines import repe_pipeline_registry
+from .mllm_pipelines import mllm_repe_pipeline_registry
 
 # RepReading
 from .rep_readers import *

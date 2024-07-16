@@ -9,7 +9,7 @@ setup(
     author_email="",
     url="https://github.com/andyzoujm/representation-engineering",
     install_requires=[
-        "transformers",
+        "transformers==4.36.0",
         "accelerate",
     ],
 )

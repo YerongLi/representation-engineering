@@ -245,9 +245,11 @@ def forward_contrast_vector(
             past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if (isinstance(self, LlamaModel) and self._use_flash_attention_2) or (isinstance(self, MistralModel) and self.config._attn_implementation == "flash_attention_2"):
+        # if (isinstance(self, LlamaModel) and hasattr(self, '_use_flash_attention_2') and self._flash_attn_2_enabled) or (isinstance(self, MistralModel) and self.config._attn_implementation == "flash_attention_2"):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif ((isinstance(self, LlamaModel) and self._use_sdpa) or (isinstance(self, MistralModel) and self.config._attn_implementation == "sdpa")) and not output_attentions:
+        # elif ((isinstance(self, LlamaModel) ) or (isinstance(self, MistralModel) and self.config._attn_implementation == "sdpa")) and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
