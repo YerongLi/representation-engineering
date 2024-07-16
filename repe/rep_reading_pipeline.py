@@ -142,7 +142,7 @@ class RepReadingPipeline(Pipeline):
             
             # get differences between pairs
             relative_hidden_states = {k: np.copy(v) for k, v in hidden_states.items()}
-            print('n_difference', n_difference)
+            # print('n_difference', n_difference)
             for layer in hidden_layers:
                 for _ in range(n_difference):
                     # Given a set of stimuli S, we proceed to divide this set into pairs of stimuli, with each pair comprising two stimuli labeled as si and si+1.

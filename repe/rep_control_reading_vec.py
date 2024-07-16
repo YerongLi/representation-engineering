@@ -65,7 +65,7 @@ class WrappedBlock(torch.nn.Module):
             self.controller = self.controller.to(modified.device)
             if type(mask) == torch.Tensor:
                 mask = mask.to(modified.device)
-            print(modified.shape, modified[:, self.token_pos].shape, self.controller.shape)
+            # print(modified.shape, modified[:, self.token_pos].shape, self.controller.shape)
             if isinstance(self.token_pos, int):
                 modified[:, self.token_pos] = self.operator(modified[:, self.token_pos], self.controller * mask)
             elif isinstance(self.token_pos, list) or isinstance(self.token_pos, tuple) or isinstance(self.token_pos, np.ndarray):
