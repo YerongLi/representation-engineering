@@ -274,6 +274,7 @@ def forward_contrast_vector(
         next_decoder_cache = None
 
         activations = None
+        # print('compute_contrast', compute_contrast) # compute_contrast True
         if compute_contrast:
             # ======== Compute repe =========    
             embeds_p = self.embed_tokens(pos_input_ids)
@@ -300,6 +301,7 @@ def forward_contrast_vector(
                 )
             else:
                 # Otherwise, use the decoder layer directly
+                # print('Else branch') Entering this branch
                 forward_function = decoder_layer
 
             # When you need to call forward_function, provide the necessary arguments
@@ -449,6 +451,7 @@ class ContrastVecMistralForCausalLM(MistralForCausalLM):
             attentions=outputs.attentions,
         )
 
+#TODO
 class ContrastVecLlamaForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         nn.Module.__init__(self)

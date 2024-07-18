@@ -90,6 +90,8 @@ class RepReadingPipeline(Pipeline):
         # Wrapper method to get a dictionary hidden states from a list of strings
         hidden_states_outputs = self(train_inputs, rep_token=rep_token,
             hidden_layers=hidden_layers, batch_size=batch_size, rep_reader=None, which_hidden_states=which_hidden_states, **tokenizer_args)
+        print(hidden_states_outputs[0])
+        print(len(hidden_states_outputs))
         hidden_states = {layer: [] for layer in hidden_layers}
         for hidden_states_batch in hidden_states_outputs:
             for layer in hidden_states_batch:
