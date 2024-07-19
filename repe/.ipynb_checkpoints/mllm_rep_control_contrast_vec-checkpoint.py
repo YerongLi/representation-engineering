@@ -33,7 +33,7 @@ from transformers.modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from functools import partial
-import copy
+
 # === should work for Llama and Mistral ===
 def contrast_greedy_search(
     self,
@@ -55,6 +55,25 @@ def contrast_greedy_search(
     # assert False, 'See Routing'
     # print('input_ids', input_ids) # DEBUG
     # ===== pop repe/contrast control args ====
+    # If 'get_params' is True in model_kwargs, return all input parameters as a dictionary
+    if model_kwargs.get('get_params', False):
+        params = {
+            'input_ids': input_ids,
+            'logits_processor': logits_processor,
+            'stopping_criteria': stopping_criteria,
+            'max_length': max_length,
+            'pad_token_id': pad_token_id,
+            'eos_token_id': eos_token_id,
+            'output_attentions': output_attentions,
+            'output_hidden_states': output_hidden_states,
+            'output_scores': output_scores,
+            'return_dict_in_generate': return_dict_in_generate,
+            'synced_gpus': synced_gpus,
+            'streamer': streamer,
+            'model_kwargs': model_kwargs,
+        }
+        return params
+
     alpha = model_kwargs.pop('alpha', None)
     contrast_tokens = model_kwargs.pop('contrast_tokens', None)
     compute_contrast = model_kwargs.pop('compute_contrast', None)
@@ -66,7 +85,6 @@ def contrast_greedy_search(
     # print('self.generation_config', self.generation_config) # DEBUG
 
     # assert not compute_contrast or not model_kwargs.get('use_cache', False), "Contrast Greedy Search not yet support generate with use_cache, please set model.generate(**kwargs, use_cache=False)" # DEBUG
-
     # init values
     logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
     stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -124,19 +142,25 @@ def contrast_greedy_search(
     # ====== REPE
 
 
-    model_kwargs_p = {'inputs_embeds' : pos_inputs_embeds,
-                    'im_mask' : pos_img_mask,
-                    }
+    inputs_p = {'inputs_embeds' : pos_inputs_embeds}
 
-    inputs_tensor_p, model_input_name_p, model_kwargs_p = self._prepare_model_inputs(
-        None, self.generation_config.bos_token_id, model_kwargs_p
+    params_p = self.generate(
+        **inputs_p,
+        max_new_tokens=1024,
+        eos_token_id=self.generation_config.eos_token_id,
+        im_mask=pos_img_mask,
+        do_sample=False,
+        **{'get_params' : True},
     )
 
-    model_kwargs_n = {'inputs_embeds' : neg_inputs_embeds,
-                    'im_mask' : neg_img_mask,
-                    }
-    inputs_tensor_n, model_input_name_n, model_kwargs_n = self._prepare_model_inputs(
-        None, self.generation_config.bos_token_id, model_kwargs_n
+    inputs_n = {'inputs_embeds' : neg_inputs_embeds}
+
+    params_n = self.generate(
+        **inputs_n,
+        max_new_tokens=1024,
+        im_mask=neg_img_mask,
+        do_sample=False,
+        **{'get_params' : True},
     )
     # ====== REPE
 
@@ -163,7 +187,8 @@ def contrast_greedy_search(
 
         # prepare model inputs
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
+        model_inputs_p = self.prepare_inputs_for_generation(params_p['input_ids'], **params_p['model_kwargs'])
+        model_inputs_n = self.prepare_inputs_for_generation(params_n['input_ids'], **params_n['model_kwargs'])
         # forward pass to get next token
         # print('model_inputs.keys()', model_inputs.keys()) # DEBUG dict_keys(['input_ids', 'position_ids', 'past_key_values', 'use_cache', 'attention_mask', 'im_mask'])
         # print('input_ids should be None', input_ids) # DEBUG not None
@@ -172,10 +197,8 @@ def contrast_greedy_search(
             return_dict=True,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            pos_inputs_embeds=pos_inputs_embeds,
-            pos_img_mask=pos_img_mask,
-            neg_inputs_embeds=neg_inputs_embeds,
-            neg_img_mask=neg_img_mask,
+            model_inputs_p=model_inputs_p,
+            model_inputs_n=model_inputs_n,
             contrast_tokens=contrast_tokens,
             compute_contrast=compute_contrast,
             alpha=alpha,
@@ -268,16 +291,17 @@ def forward_contrast_vector(self,
                 alpha = None,
                 contrast_tokens: int = None,
                 compute_contrast: bool = False,
-                pos_inputs_embeds: torch.LongTensor = None,
-                pos_img_mask: torch.LongTensor = None,
-                neg_inputs_embeds: torch.LongTensor = None,
-                neg_img_mask:  torch.LongTensor = None,
+                model_inputs_p = None,
+                model_inputs_n = None ,
                 control_layer_ids: List[int] = [],
                 pad_right: int = 0,
                 **kwargs) -> Union[Tuple, BaseModelOutputWithPast]:
 
         im_mask = kwargs.get('im_mask', None)
-
+        print('model_inputs_p')
+        print(model_inputs_p)
+        print('model_inputs_n')
+        print(model_inputs_n)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else
@@ -360,11 +384,7 @@ def forward_contrast_vector(self,
         activations = None
         if compute_contrast:
             # ======== REPE Compute repe =========    
-            embeds_p = pos_inputs_embeds
-            embeds_n = neg_inputs_embeds
-            hidden_states_p, hidden_states_n = embeds_p, embeds_n
-            
-   
+            pass
             # ======== REPE Compute repe ========= 
     
         for idx, decoder_layer in enumerate(self.layers):
