@@ -62,7 +62,7 @@ def contrast_greedy_search(
     neg_attention_mask = model_kwargs.pop('neg_attention_mask', None)
     control_layer_ids = model_kwargs.pop('control_layer_ids', None)
 
-    assert not compute_contrast or not model_kwargs.get('use_cache', False), "Contrast Greedy Search not yet support generate with use_cache, please set model.generate(**kwargs, use_cache=False)"
+    # assert not compute_contrast or not model_kwargs.get('use_cache', False), "Contrast Greedy Search not yet support generate with use_cache, please set model.generate(**kwargs, use_cache=False)" # DEBUG
 
     # init values
     logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
