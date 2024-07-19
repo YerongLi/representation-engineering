@@ -33,7 +33,7 @@ from transformers.modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from functools import partial
-
+import copy
 # === should work for Llama and Mistral ===
 def contrast_greedy_search(
     self,
@@ -51,7 +51,9 @@ def contrast_greedy_search(
     streamer: Optional["BaseStreamer"] = None,
     **model_kwargs,
 ) -> Union[GreedySearchDecoderOnlyOutput, torch.LongTensor]:
-    print('Entering constrastive greedy search')
+    # print('Entering constrastive greedy search')
+    # assert False, 'See Routing'
+    # print('input_ids', input_ids) # DEBUG
     # ===== pop repe/contrast control args ====
     alpha = model_kwargs.pop('alpha', None)
     contrast_tokens = model_kwargs.pop('contrast_tokens', None)
@@ -61,6 +63,7 @@ def contrast_greedy_search(
     neg_inputs_embeds = model_kwargs.pop('neg_inputs_embeds', None)
     neg_img_mask = model_kwargs.pop('neg_img_mask', None)
     control_layer_ids = model_kwargs.pop('control_layer_ids', None)
+    # print('self.generation_config', self.generation_config) # DEBUG
 
     # assert not compute_contrast or not model_kwargs.get('use_cache', False), "Contrast Greedy Search not yet support generate with use_cache, please set model.generate(**kwargs, use_cache=False)" # DEBUG
 
@@ -91,6 +94,51 @@ def contrast_greedy_search(
         if return_dict_in_generate is not None
         else self.generation_config.return_dict_in_generate
     )
+
+# show inputs None 
+# show generation_config.bos_token_id 1 
+# show model_kwargs {'inputs_embeds': tensor([[[ 0.0009,  0.0001,  0.0056,  ..., -0.0002,  0.0017, -0.0022],
+#          [ 0.0008,  0.0005, -0.0012,  ..., -0.0016, -0.0001,  0.0011],
+#          [ 0.0011, -0.0013, -0.0125,  ...,  0.0175, -0.0038, -0.0222],
+#          ...,
+#          [-0.0126,  0.0248, -0.0103,  ..., -0.0117, -0.0082, -0.0093],
+#          [-0.0199, -0.0079,  0.0151,  ...,  0.0035,  0.0123,  0.0461],
+#          [-0.0030, -0.0014, -0.0103,  ..., -0.0109,  0.0173,  0.0079]]],
+#        device='cuda:0', grad_fn=<SliceBackward0>), 'im_mask': tensor([[False, False, False,  ..., False, False, False]], device='cuda:0'), 'pos_inputs_embeds': tensor([[[ 0.0009,  0.0001,  0.0056,  ..., -0.0002,  0.0017, -0.0022],
+#          [ 0.0008,  0.0005, -0.0012,  ..., -0.0016, -0.0001,  0.0011],
+#          [ 0.0011, -0.0013, -0.0125,  ...,  0.0175, -0.0038, -0.0222],
+#          ...,
+#          [-0.0126,  0.0248, -0.0103,  ..., -0.0117, -0.0082, -0.0093],
+#          [-0.0199, -0.0079,  0.0151,  ...,  0.0035,  0.0123,  0.0461],
+#          [-0.0030, -0.0014, -0.0103,  ..., -0.0109,  0.0173,  0.0079]]],
+#        device='cuda:0', grad_fn=<SliceBackward0>), 'pos_img_mask': tensor([[False, False, False,  ..., False, False, False]], device='cuda:0'), 'neg_inputs_embeds': tensor([[[ 0.0009,  0.0001,  0.0056,  ..., -0.0002,  0.0017, -0.0022],
+#          [ 0.0008,  0.0005, -0.0012,  ..., -0.0016, -0.0001,  0.0011],
+#          [ 0.0011, -0.0013, -0.0125,  ...,  0.0175, -0.0038, -0.0222],
+#          ...,
+#          [-0.0126,  0.0248, -0.0103,  ..., -0.0117, -0.0082, -0.0093],
+#          [-0.0199, -0.0079,  0.0151,  ...,  0.0035,  0.0123,  0.0461],
+#          [-0.0030, -0.0014, -0.0103,  ..., -0.0109,  0.0173,  0.0079]]],
+#        device='cuda:0', grad_fn=<SliceBackward0>), 'neg_img_mask': tensor([[False, False, False,  ..., False, False, False]], device='cuda:0'), 'contrast_tokens': -8, 'compute_contrast': True, 'alpha': 0, 'control_layer_ids': [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30], 'input_ids': tensor([[1]], device='cuda:0')}
+# input_ids tensor([[1]], device='cuda:0')
+# input_ids in model_kwargs False
+    # ====== REPE
+
+
+    model_kwargs_p = {'inputs_embeds' : pos_inputs_embeds,
+                    'im_mask' : pos_img_mask,
+                    }
+
+    inputs_tensor_p, model_input_name_p, model_kwargs_p = self._prepare_model_inputs(
+        None, self.generation_config.bos_token_id, model_kwargs_p
+    )
+
+    model_kwargs_n = {'inputs_embeds' : neg_inputs_embeds,
+                    'im_mask' : neg_img_mask,
+                    }
+    inputs_tensor_n, model_input_name_n, model_kwargs_n = self._prepare_model_inputs(
+        None, self.generation_config.bos_token_id, model_kwargs_n
+    )
+    # ====== REPE
 
     # init attention / hidden states / scores tuples
     scores = () if (return_dict_in_generate and output_scores) else None
@@ -293,18 +341,30 @@ def forward_contrast_vector(self,
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
-        print('pos_inputs_embeds.shape', pos_inputs_embeds.shape)
-        print('inputs_embeds.shape', inputs_embeds.shape)
+        # print('pos_inputs_embeds.shape', pos_inputs_embeds.shape)
+        # print('inputs_embeds.shape', inputs_embeds.shape)
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+
+
+
         activations = None
         if compute_contrast:
             # ======== REPE Compute repe =========    
             embeds_p = pos_inputs_embeds
             embeds_n = neg_inputs_embeds
             hidden_states_p, hidden_states_n = embeds_p, embeds_n
-
-            batch_size_p, seq_length_p = pos_inputs_embeds.shape[:2]
-
-            batch_size_n, seq_length_n = neg_inputs_embeds.shape[:2]
+            
+   
             # ======== REPE Compute repe ========= 
     
         for idx, decoder_layer in enumerate(self.layers):
