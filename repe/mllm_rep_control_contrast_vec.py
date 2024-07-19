@@ -117,6 +117,8 @@ def contrast_greedy_search(
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
         # forward pass to get next token
+        # print('model_inputs.keys()', model_inputs.keys()) # DEBUG dict_keys(['input_ids', 'position_ids', 'past_key_values', 'use_cache', 'attention_mask', 'im_mask'])
+        # print('input_ids should be None', input_ids) # DEBUG not None
         outputs = self(
             **model_inputs,
             return_dict=True,
@@ -299,13 +301,9 @@ def forward_contrast_vector(self,
             embeds_n = neg_inputs_embeds
             hidden_states_p, hidden_states_n = embeds_p, embeds_n
 
-            # pos_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-            #     pos_attention_mask, embeds_p.shape[:2], embeds_p, past_key_values_length
-            # )
+            batch_size_p, seq_length_p = pos_inputs_embeds.shape[:2]
 
-            # neg_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-            #     neg_attention_mask, embeds_n.shape[:2], embeds_n, past_key_values_length
-            # )
+            batch_size_n, seq_length_n = neg_inputs_embeds.shape[:2]
             # ======== REPE Compute repe ========= 
     
         for idx, decoder_layer in enumerate(self.layers):
@@ -345,6 +343,37 @@ def forward_contrast_vector(self,
                 )
 
             hidden_states = layer_outputs[0]
+            
+            # 1. if layer in target layer, we recompute activations and add
+            # 2. else will add previous computed activations
+            if compute_contrast:
+                # ======== Compute activations for target layers =========  
+                with torch.no_grad():
+                    pass
+                    # hidden_states_p = decoder_layer(
+                    #     hidden_states_p,
+                    #     attention_mask=attention_mask_p,
+                    #     use_cache=use_cache,
+                    #     im_mask=pos_img_mask,
+                    # )
+                    # hidden_states_n = decoder_layer(
+                    #     hidden_states_n,
+                    #     attention_mask=attention_mask_n,
+                    #     use_cache=use_cache,
+                    #     im_mask=neg_img_mask,
+                    # )
+                
+            
+                #     hidden_states_n = forward_function(
+                #         hidden_states_n,
+                #         attention_mask=neg_attention_mask,
+                #         use_cache=use_cache
+                #     )[0].detach()
+                # ======== Compute activations for target layers =========    
+                # ======== Perturbate the Layers =========    
+                if idx in control_layer_ids:
+                    pass
+                # ======== Perturbate the Layers =========    
 
             if use_cache:
                 next_decoder_cache += (
@@ -523,7 +552,8 @@ class ContrastVecInternlmForCausalLM(InternLMXComposer2ForCausalLM):
                     (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
             Returns:
             """
-    
+            # print('attention_mask input', attention_mask) # DEBUG attention_mask input tensor([[1, 1, 1,  ..., 1, 1, 1]], device='cuda:0')
+            # assert False, 'see routing'
             samples = repe_kwargs.get('samples', None)
             if samples:
                 if samples['data_type'][0] == 'text':
@@ -545,6 +575,7 @@ class ContrastVecInternlmForCausalLM(InternLMXComposer2ForCausalLM):
                         text, add_special=True)
                     to_regress_embeds = self.model.tok_embeddings(
                         to_regress_tokens.input_ids)
+                    print('attention_mask = to_regress_tokens.attention_mask')
                     attention_mask = to_regress_tokens.attention_mask
                     im_mask = torch.zeros(to_regress_embeds.shape[:2]).cuda()
     
