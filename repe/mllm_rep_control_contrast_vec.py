@@ -51,7 +51,7 @@ def contrast_greedy_search(
     streamer: Optional["BaseStreamer"] = None,
     **model_kwargs,
 ) -> Union[GreedySearchDecoderOnlyOutput, torch.LongTensor]:
-    # print('Entering constrastive greedy search')
+    print('Entering constrastive greedy search')
     # ===== pop repe/contrast control args ====
     alpha = model_kwargs.pop('alpha', None)
     contrast_tokens = model_kwargs.pop('contrast_tokens', None)
