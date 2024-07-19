@@ -293,7 +293,8 @@ def forward_contrast_vector(self,
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
-        
+        print('pos_inputs_embeds.shape', pos_inputs_embeds.shape)
+        print('inputs_embeds.shape', inputs_embeds.shape)
         activations = None
         if compute_contrast:
             # ======== REPE Compute repe =========    
