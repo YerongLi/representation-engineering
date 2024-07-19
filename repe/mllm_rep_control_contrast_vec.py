@@ -56,10 +56,10 @@ def contrast_greedy_search(
     alpha = model_kwargs.pop('alpha', None)
     contrast_tokens = model_kwargs.pop('contrast_tokens', None)
     compute_contrast = model_kwargs.pop('compute_contrast', None)
-    pos_input_ids = model_kwargs.pop('pos_input_ids', None)
-    pos_attention_mask = model_kwargs.pop('pos_attention_mask', None)
-    neg_input_ids = model_kwargs.pop('neg_input_ids', None)
-    neg_attention_mask = model_kwargs.pop('neg_attention_mask', None)
+    pos_inputs_embeds = model_kwargs.pop('pos_inputs_embeds', None)
+    pos_img_mask = model_kwargs.pop('pos_img_mask', None)
+    neg_inputs_embeds = model_kwargs.pop('neg_inputs_embeds', None)
+    neg_img_mask = model_kwargs.pop('neg_img_mask', None)
     control_layer_ids = model_kwargs.pop('control_layer_ids', None)
 
     # assert not compute_contrast or not model_kwargs.get('use_cache', False), "Contrast Greedy Search not yet support generate with use_cache, please set model.generate(**kwargs, use_cache=False)" # DEBUG
@@ -122,10 +122,10 @@ def contrast_greedy_search(
             return_dict=True,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            pos_input_ids=pos_input_ids,
-            pos_attention_mask=pos_attention_mask,
-            neg_input_ids=neg_input_ids,
-            neg_attention_mask=neg_attention_mask,
+            pos_inputs_embeds=pos_inputs_embeds,
+            pos_img_mask=pos_img_mask,
+            neg_inputs_embeds=neg_inputs_embeds,
+            neg_img_mask=neg_img_mask,
             contrast_tokens=contrast_tokens,
             compute_contrast=compute_contrast,
             alpha=alpha,
@@ -218,10 +218,10 @@ def forward_contrast_vector(self,
                 alpha = None,
                 contrast_tokens: int = None,
                 compute_contrast: bool = False,
-                pos_input_ids: torch.LongTensor = None,
-                pos_attention_mask: torch.LongTensor = None,
-                neg_input_ids: torch.LongTensor = None,
-                neg_attention_mask:  torch.LongTensor = None,
+                pos_inputs_embeds: torch.LongTensor = None,
+                pos_img_mask: torch.LongTensor = None,
+                neg_inputs_embeds: torch.LongTensor = None,
+                neg_img_mask:  torch.LongTensor = None,
                 control_layer_ids: List[int] = [],
                 pad_right: int = 0,
                 **kwargs) -> Union[Tuple, BaseModelOutputWithPast]:
@@ -295,17 +295,17 @@ def forward_contrast_vector(self,
         activations = None
         if compute_contrast:
             # ======== REPE Compute repe =========    
-            embeds_p = self.embed_tokens(pos_input_ids)
-            embeds_n = self.embed_tokens(neg_input_ids)
+            embeds_p = pos_inputs_embeds
+            embeds_n = neg_inputs_embeds
             hidden_states_p, hidden_states_n = embeds_p, embeds_n
 
-            pos_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                pos_attention_mask, embeds_p.shape[:2], embeds_p, past_key_values_length
-            )
+            # pos_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+            #     pos_attention_mask, embeds_p.shape[:2], embeds_p, past_key_values_length
+            # )
 
-            neg_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                neg_attention_mask, embeds_n.shape[:2], embeds_n, past_key_values_length
-            )
+            # neg_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+            #     neg_attention_mask, embeds_n.shape[:2], embeds_n, past_key_values_length
+            # )
             # ======== REPE Compute repe ========= 
     
         for idx, decoder_layer in enumerate(self.layers):
