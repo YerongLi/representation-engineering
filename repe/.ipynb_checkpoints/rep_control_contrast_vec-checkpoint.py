@@ -98,6 +98,9 @@ def contrast_greedy_search(
 
         # prepare model inputs
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+        # if pos_input_ids is not None:
+        #     print('model_inputs',model_inputs['input_ids'].shape)
+        #     print('pos_input_ids',pos_input_ids.shape)
 
         # forward pass to get next token
         outputs = self(
@@ -209,6 +212,8 @@ def forward_contrast_vector(
         control_layer_ids: List[int] = [],
         pad_right: int = 0
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        # print('pos_input_ids',pos_input_ids)
+    
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -276,7 +281,7 @@ def forward_contrast_vector(
         activations = None
         # print('compute_contrast', compute_contrast) # compute_contrast True
         if compute_contrast:
-            # ======== Compute repe =========    
+            # ======== Compute repe =========
             embeds_p = self.embed_tokens(pos_input_ids)
             embeds_n = self.embed_tokens(neg_input_ids)
             hidden_states_p, hidden_states_n = embeds_p, embeds_n

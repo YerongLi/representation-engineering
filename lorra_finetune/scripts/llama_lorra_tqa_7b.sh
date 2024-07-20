@@ -6,8 +6,8 @@ ds_master_port=$((29000 + RANDOM % 1000))
 
 cd ..
 
-deepspeed --master_port $ds_master_port src/llama2_lorra.py \
-    --model_name_or_path  "meta-llama/Llama-2-7b-chat-hf" \
+deepspeed --master_port $ds_master_port --num_gpus=1 src/llama2_lorra.py \
+    --model_name_or_path  "/home/yerong2/models/Llama-2-7b-chat-hf" \
     --user_tag '[INST]' \
     --assistant_tag '[/INST]' \
     --pos_type 'a truthful' \
@@ -21,10 +21,10 @@ deepspeed --master_port $ds_master_port src/llama2_lorra.py \
     --lora_dropout 0.05 \
     --output_dir ./lorra_tqa_7b \
     --overwrite_output_dir \
-    --max_steps 70 \
+    --max_steps 700 \
     --bf16 True \
-    --per_device_train_batch_size 16 \
-    --per_device_eval_batch_size 32 \
+    --per_device_train_batch_size 4 \
+    --per_device_eval_batch_size 8 \
     --gradient_accumulation_steps 1 \
     --do_eval \
     --evaluation_strategy "steps" \
@@ -40,7 +40,7 @@ deepspeed --master_port $ds_master_port src/llama2_lorra.py \
     --q_lora False \
     --deepspeed configs/ds_zero1.json \
     --gradient_checkpointing True \
-    --report_to none
+    --report_to none \
 
 
 # "/data/private_models/cais_models/llama-2/llama/llama-2-13b-chat-hf/"

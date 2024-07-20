@@ -32,6 +32,7 @@ from transformers import Trainer, BitsAndBytesConfig, deepspeed
 import torch
 from train_val_datasets import AlpacaSupervisedDataset, load_tqa_sentences, load_arc_sentences, get_logprobs_accuracy
 import pickle
+from mllm_utils import auto_configure_device_map
 
 from args import (
     ModelArguments,
@@ -146,8 +147,8 @@ def train():
         lorra_args,
     ) = parser.parse_args_into_dataclasses()
 
-    device_map = "auto"
-    # device_map = {"":0}
+
+ 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
     if lora_args.q_lora:
@@ -166,9 +167,13 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
-        device_map=device_map
+        trust_remote_code=True
     )
-
+    from accelerate import dispatch_model
+    device_map = auto_configure_device_map(4)
+    print(device_map)
+    model = dispatch_model(model, device_map=device_map)
+    
     lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
     lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
 
@@ -206,6 +211,7 @@ def train():
         model_max_length=training_args.model_max_length,
         padding_side="left",
         use_fast=False,
+        trust_remote_code=True,
     )
     tokenizer.pad_token = tokenizer.unk_token
 
@@ -231,6 +237,7 @@ def train():
                                 return_outputs=return_outputs)
         
         def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
+            return None
             self.model.eval()
 
             if sanity_check:

@@ -51,8 +51,29 @@ def contrast_greedy_search(
     streamer: Optional["BaseStreamer"] = None,
     **model_kwargs,
 ) -> Union[GreedySearchDecoderOnlyOutput, torch.LongTensor]:
-    print('Entering constrastive greedy search')
+    # print('Entering constrastive greedy search')
+    # assert False, 'See Routing'
+    # print('input_ids', input_ids) # DEBUG
     # ===== pop repe/contrast control args ====
+    # If 'get_params' is True in model_kwargs, return all input parameters as a dictionary
+    if model_kwargs.get('get_params', False):
+        params = {
+            'input_ids': input_ids,
+            'logits_processor': logits_processor,
+            'stopping_criteria': stopping_criteria,
+            'max_length': max_length,
+            'pad_token_id': pad_token_id,
+            'eos_token_id': eos_token_id,
+            'output_attentions': output_attentions,
+            'output_hidden_states': output_hidden_states,
+            'output_scores': output_scores,
+            'return_dict_in_generate': return_dict_in_generate,
+            'synced_gpus': synced_gpus,
+            'streamer': streamer,
+            'model_kwargs': model_kwargs,
+        }
+        return params
+
     alpha = model_kwargs.pop('alpha', None)
     contrast_tokens = model_kwargs.pop('contrast_tokens', None)
     compute_contrast = model_kwargs.pop('compute_contrast', None)
@@ -61,9 +82,9 @@ def contrast_greedy_search(
     neg_inputs_embeds = model_kwargs.pop('neg_inputs_embeds', None)
     neg_img_mask = model_kwargs.pop('neg_img_mask', None)
     control_layer_ids = model_kwargs.pop('control_layer_ids', None)
+    # print('self.generation_config', self.generation_config) # DEBUG
 
     # assert not compute_contrast or not model_kwargs.get('use_cache', False), "Contrast Greedy Search not yet support generate with use_cache, please set model.generate(**kwargs, use_cache=False)" # DEBUG
-
     # init values
     logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
     stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -92,6 +113,57 @@ def contrast_greedy_search(
         else self.generation_config.return_dict_in_generate
     )
 
+# show inputs None 
+# show generation_config.bos_token_id 1 
+# show model_kwargs {'inputs_embeds': tensor([[[ 0.0009,  0.0001,  0.0056,  ..., -0.0002,  0.0017, -0.0022],
+#          [ 0.0008,  0.0005, -0.0012,  ..., -0.0016, -0.0001,  0.0011],
+#          [ 0.0011, -0.0013, -0.0125,  ...,  0.0175, -0.0038, -0.0222],
+#          ...,
+#          [-0.0126,  0.0248, -0.0103,  ..., -0.0117, -0.0082, -0.0093],
+#          [-0.0199, -0.0079,  0.0151,  ...,  0.0035,  0.0123,  0.0461],
+#          [-0.0030, -0.0014, -0.0103,  ..., -0.0109,  0.0173,  0.0079]]],
+#        device='cuda:0', grad_fn=<SliceBackward0>), 'im_mask': tensor([[False, False, False,  ..., False, False, False]], device='cuda:0'), 'pos_inputs_embeds': tensor([[[ 0.0009,  0.0001,  0.0056,  ..., -0.0002,  0.0017, -0.0022],
+#          [ 0.0008,  0.0005, -0.0012,  ..., -0.0016, -0.0001,  0.0011],
+#          [ 0.0011, -0.0013, -0.0125,  ...,  0.0175, -0.0038, -0.0222],
+#          ...,
+#          [-0.0126,  0.0248, -0.0103,  ..., -0.0117, -0.0082, -0.0093],
+#          [-0.0199, -0.0079,  0.0151,  ...,  0.0035,  0.0123,  0.0461],
+#          [-0.0030, -0.0014, -0.0103,  ..., -0.0109,  0.0173,  0.0079]]],
+#        device='cuda:0', grad_fn=<SliceBackward0>), 'pos_img_mask': tensor([[False, False, False,  ..., False, False, False]], device='cuda:0'), 'neg_inputs_embeds': tensor([[[ 0.0009,  0.0001,  0.0056,  ..., -0.0002,  0.0017, -0.0022],
+#          [ 0.0008,  0.0005, -0.0012,  ..., -0.0016, -0.0001,  0.0011],
+#          [ 0.0011, -0.0013, -0.0125,  ...,  0.0175, -0.0038, -0.0222],
+#          ...,
+#          [-0.0126,  0.0248, -0.0103,  ..., -0.0117, -0.0082, -0.0093],
+#          [-0.0199, -0.0079,  0.0151,  ...,  0.0035,  0.0123,  0.0461],
+#          [-0.0030, -0.0014, -0.0103,  ..., -0.0109,  0.0173,  0.0079]]],
+#        device='cuda:0', grad_fn=<SliceBackward0>), 'neg_img_mask': tensor([[False, False, False,  ..., False, False, False]], device='cuda:0'), 'contrast_tokens': -8, 'compute_contrast': True, 'alpha': 0, 'control_layer_ids': [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30], 'input_ids': tensor([[1]], device='cuda:0')}
+# input_ids tensor([[1]], device='cuda:0')
+# input_ids in model_kwargs False
+    # ====== REPE
+
+
+    inputs_p = {'inputs_embeds' : pos_inputs_embeds}
+
+    params_p = self.generate(
+        **inputs_p,
+        max_new_tokens=1024,
+        eos_token_id=self.generation_config.eos_token_id,
+        im_mask=pos_img_mask,
+        do_sample=False,
+        **{'get_params' : True},
+    )
+
+    inputs_n = {'inputs_embeds' : neg_inputs_embeds}
+
+    params_n = self.generate(
+        **inputs_n,
+        max_new_tokens=1024,
+        im_mask=neg_img_mask,
+        do_sample=False,
+        **{'get_params' : True},
+    )
+    # ====== REPE
+
     # init attention / hidden states / scores tuples
     scores = () if (return_dict_in_generate and output_scores) else None
     decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
@@ -115,7 +187,11 @@ def contrast_greedy_search(
 
         # prepare model inputs
         model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+        # print('input embeds shape', model_kwargs['inputs_embeds'].shape, params_p['model_kwargs']['inputs_embeds'].shape)
 
+        model_inputs_p = self.prepare_inputs_for_generation(params_p['input_ids'], **params_p['model_kwargs'])
+        model_inputs_n = self.prepare_inputs_for_generation(params_n['input_ids'], **params_n['model_kwargs'])
+        # print('model_inputs att shape', model_inputs['attention_mask'].shape, model_inputs_p['attention_mask'].shape)
         # forward pass to get next token
         # print('model_inputs.keys()', model_inputs.keys()) # DEBUG dict_keys(['input_ids', 'position_ids', 'past_key_values', 'use_cache', 'attention_mask', 'im_mask'])
         # print('input_ids should be None', input_ids) # DEBUG not None
@@ -124,10 +200,8 @@ def contrast_greedy_search(
             return_dict=True,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            pos_inputs_embeds=pos_inputs_embeds,
-            pos_img_mask=pos_img_mask,
-            neg_inputs_embeds=neg_inputs_embeds,
-            neg_img_mask=neg_img_mask,
+            model_inputs_p=model_inputs_p,
+            model_inputs_n=model_inputs_n,
             contrast_tokens=contrast_tokens,
             compute_contrast=compute_contrast,
             alpha=alpha,
@@ -204,8 +278,87 @@ def contrast_greedy_search(
     else:
         return input_ids
 
+def postprocess(self,
+                input_ids: torch.LongTensor = None,
+                attention_mask: Optional[torch.Tensor] = None,
+                position_ids: Optional[torch.LongTensor] = None,
+                past_key_values: Optional[List[torch.FloatTensor]] = None,
+                inputs_embeds: Optional[torch.FloatTensor] = None,
+                use_cache: Optional[bool] = None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                **kwargs
+               ):
+        # layer_outputs = decoder_layer(
+        #     hidden_states,
+        #     attention_mask=attention_mask,
+        #     position_ids=position_ids,
+        #     past_key_value=past_key_value,
+        #     output_attentions=output_attentions,
+        #     use_cache=use_cache,
+        #     im_mask=im_mask,
+        # )   
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError(
+                'You cannot specify both input_ids and inputs_embeds at the same time'
+            )
+        elif input_ids is not None:
+            batch_size, seq_length = input_ids.shape[:2]
+        elif inputs_embeds is not None:
+            batch_size, seq_length = inputs_embeds.shape[:2]
+        else:
+            raise ValueError(
+                'You have to specify either input_ids or inputs_embeds')
+    
+        seq_length_with_past = seq_length
+        past_key_values_length = 0
+        if past_key_values is not None:
+            past_key_values_length = past_key_values[0][0].shape[2]
+            seq_length_with_past = seq_length_with_past + past_key_values_length
+    
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = torch.arange(
+                past_key_values_length,
+                seq_length + past_key_values_length,
+                dtype=torch.long,
+                device=device)
+            position_ids = position_ids.unsqueeze(0)
+    
+        if inputs_embeds is None:
+            inputs_embeds = self.tok_embeddings(input_ids)
+            im_mask = torch.zeros(inputs_embeds.shape[:2]).to(
+                inputs_embeds.device).bool()
+        # embed positions
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_length_with_past),
+                                        dtype=torch.bool,
+                                        device=inputs_embeds.device)
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, (batch_size, seq_length), inputs_embeds,
+            past_key_values_length)
+        result = {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'position_ids': position_ids,
+            'past_key_values': past_key_values,
+            'inputs_embeds': inputs_embeds,
+            'use_cache': use_cache,
+            'output_attentions': output_attentions,
+            'output_hidden_states': output_hidden_states,
+            'batch_size': batch_size,
+            'seq_length': seq_length,
+            'seq_length_with_past': seq_length_with_past,
+            'past_key_values_length': past_key_values_length,
+        }
+        
+        if 'im_mask' in locals():
+            result['im_mask'] = im_mask
+        
+        return result
 
-# def forward_contrast_vector(
+
 def forward_contrast_vector(self,
                 input_ids: torch.LongTensor = None,
                 attention_mask: Optional[torch.Tensor] = None,
@@ -220,16 +373,17 @@ def forward_contrast_vector(self,
                 alpha = None,
                 contrast_tokens: int = None,
                 compute_contrast: bool = False,
-                pos_inputs_embeds: torch.LongTensor = None,
-                pos_img_mask: torch.LongTensor = None,
-                neg_inputs_embeds: torch.LongTensor = None,
-                neg_img_mask:  torch.LongTensor = None,
+                model_inputs_p = None,
+                model_inputs_n = None ,
                 control_layer_ids: List[int] = [],
                 pad_right: int = 0,
                 **kwargs) -> Union[Tuple, BaseModelOutputWithPast]:
-
+ 
         im_mask = kwargs.get('im_mask', None)
-
+        # print('model_inputs_p')
+        # print(model_inputs_p)
+        # print('model_inputs_n')
+        # print(model_inputs_n)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else
@@ -239,47 +393,66 @@ def forward_contrast_vector(self,
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                'You cannot specify both input_ids and inputs_embeds at the same time'
-            )
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape[:2]
-        elif inputs_embeds is not None:
-            batch_size, seq_length = inputs_embeds.shape[:2]
-        else:
-            raise ValueError(
-                'You have to specify either input_ids or inputs_embeds')
+        # if input_ids is not None and inputs_embeds is not None:
+        #     raise ValueError(
+        #         'You cannot specify both input_ids and inputs_embeds at the same time'
+        #     )
+        # elif input_ids is not None:
+        #     batch_size, seq_length = input_ids.shape[:2]
+        # elif inputs_embeds is not None:
+        #     batch_size, seq_length = inputs_embeds.shape[:2]
+        # else:
+        #     raise ValueError(
+        #         'You have to specify either input_ids or inputs_embeds')
 
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        # seq_length_with_past = seq_length
+        # past_key_values_length = 0
+        # if past_key_values is not None:
+        #     past_key_values_length = past_key_values[0][0].shape[2]
+        #     seq_length_with_past = seq_length_with_past + past_key_values_length
 
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length,
-                seq_length + past_key_values_length,
-                dtype=torch.long,
-                device=device)
-            position_ids = position_ids.unsqueeze(0)
+        # if position_ids is None:
+        #     device = input_ids.device if input_ids is not None else inputs_embeds.device
+        #     position_ids = torch.arange(
+        #         past_key_values_length,
+        #         seq_length + past_key_values_length,
+        #         dtype=torch.long,
+        #         device=device)
+        #     position_ids = position_ids.unsqueeze(0)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.tok_embeddings(input_ids)
-            im_mask = torch.zeros(inputs_embeds.shape[:2]).to(
-                inputs_embeds.device).bool()
+        # if inputs_embeds is None:
+        #     inputs_embeds = self.tok_embeddings(input_ids)
+        #     im_mask = torch.zeros(inputs_embeds.shape[:2]).to(
+        #         inputs_embeds.device).bool()
+        # # embed positions
+        # if attention_mask is None:
+        #     attention_mask = torch.ones((batch_size, seq_length_with_past),
+        #                                 dtype=torch.bool,
+        #                                 device=inputs_embeds.device)
+        # attention_mask = self._prepare_decoder_attention_mask(
+        #     attention_mask, (batch_size, seq_length), inputs_embeds,
+        #     past_key_values_length)
+
         # embed positions
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past),
-                                        dtype=torch.bool,
-                                        device=inputs_embeds.device)
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds,
-            past_key_values_length)
+        result=postprocess(self,
+                input_ids = input_ids,
+                attention_mask = attention_mask,
+                position_ids = position_ids,
+                past_key_values = past_key_values,
+                inputs_embeds = inputs_embeds,
+                use_cache = use_cache,
+                output_attentions = output_attentions,
+                output_hidden_states = output_hidden_states
+               )
+        input_ids = result.get('input_ids')
+        attention_mask = result.get('attention_mask')
+        position_ids = result.get('position_ids')
+        inputs_embeds = result.get('inputs_embeds')
+        batch_size = result.get('batch_size')
+        seq_length = result.get('seq_length')
 
-        # embed positions
+        if 'im_mask' in result:
+            im_mask = result.get('im_mask')
         hidden_states = inputs_embeds
 
         if self.gradient_checkpointing and self.training:
@@ -293,21 +466,63 @@ def forward_contrast_vector(self,
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
-        print('pos_inputs_embeds.shape', pos_inputs_embeds.shape)
-        print('inputs_embeds.shape', inputs_embeds.shape)
+        # print('pos_inputs_embeds.shape', pos_inputs_embeds.shape)
+        # print('inputs_embeds.shape', inputs_embeds.shape)
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+        # pos_inputs_embeds.shape torch.Size([1, 1272, 4096])
+        # inputs_embeds.shape torch.Size([1, 1, 4096])
+
+
+
         activations = None
         if compute_contrast:
             # ======== REPE Compute repe =========    
-            embeds_p = pos_inputs_embeds
-            embeds_n = neg_inputs_embeds
-            hidden_states_p, hidden_states_n = embeds_p, embeds_n
+            hidden_states_p = model_inputs_p['inputs_embeds']  
+            hidden_states_n = model_inputs_n['inputs_embeds']  
 
-            batch_size_p, seq_length_p = pos_inputs_embeds.shape[:2]
-
-            batch_size_n, seq_length_n = neg_inputs_embeds.shape[:2]
+            # results = postprocess(self, **model_inputs_p)
+            # input_ids_p = result.get('input_ids')
+            # attention_mask_p = result.get('attention_mask')
+            # position_ids_p = result.get('position_ids')
+            # past_key_values_p = result.get('past_key_values')
+            # inputs_embeds_p = result.get('inputs_embeds')
+            # use_cache_p = result.get('use_cache')
+            # output_attentions_p = result.get('output_attentions')
+            # output_hidden_states_p = result.get('output_hidden_states')
+            # batch_size_p = result.get('batch_size')
+            # seq_length_p = result.get('seq_length')
+            # seq_length_with_past_p = result.get('seq_length_with_past')
+            # past_key_values_length_p = result.get('past_key_values_length')
+            
+            # results = postprocess(self, **model_inputs_n)
+            # input_ids_n = result.get('input_ids')
+            # attention_mask_n = result.get('attention_mask')
+            # position_ids_n = result.get('position_ids')
+            # past_key_values_n = result.get('past_key_values')
+            # inputs_embeds_n = result.get('inputs_embeds')
+            # use_cache_n = result.get('use_cache')
+            # output_attentions_n = result.get('output_attentions')
+            # output_hidden_states_n = result.get('output_hidden_states')
+            # batch_size_n = result.get('batch_size')
+            # seq_length_n = result.get('seq_length')
+            # seq_length_with_past_n = result.get('seq_length_with_past')
+            # past_key_values_length_n = result.get('past_key_values_length')
+            # # print('attention Shape', attention_mask.shape, attention_mask_p.shape)
+            # position_ids_p = model_inputs_p['position_ids']
+            # position_ids_n = model_inputs_n['position_ids']
             # ======== REPE Compute repe ========= 
     
         for idx, decoder_layer in enumerate(self.layers):
+            # print('hidden_states')
+            # print(hidden_states)
             if output_hidden_states:
                 all_hidden_states += (hidden_states, )
 
@@ -315,7 +530,7 @@ def forward_contrast_vector(self,
                 idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
+                print('gradient_checkpointing branch')
                 def create_custom_forward(module):
 
                     def custom_forward(*inputs):
@@ -347,30 +562,71 @@ def forward_contrast_vector(self,
             
             # 1. if layer in target layer, we recompute activations and add
             # 2. else will add previous computed activations
-            if compute_contrast:
-                # ======== Compute activations for target layers =========  
-                with torch.no_grad():
-                    pass
-                    # hidden_states_p = decoder_layer(
-                    #     hidden_states_p,
-                    #     attention_mask=attention_mask_p,
-                    #     use_cache=use_cache,
-                    #     im_mask=pos_img_mask,
-                    # )
-                    # hidden_states_n = decoder_layer(
-                    #     hidden_states_n,
-                    #     attention_mask=attention_mask_n,
-                    #     use_cache=use_cache,
-                    #     im_mask=neg_img_mask,
-                    # )
+            if compute_contrast and False:
+                # ======== Compute activations for POS/NEG layers =========  
+                if self.gradient_checkpointing and self.training:
+                    print('gradient_checkpointing branch')
+                    def create_custom_forward(module):
+    
+                        def custom_forward(*inputs):
+                            # None for past_key_value
+                            return module(*inputs, output_attentions, None,
+                                          im_mask)
+    
+                        return custom_forward
+    
+                    layer_outputs_p = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states_p,
+                        attention_mask_p,
+                        position_ids_p,
+                        None,
+                    )
+                else:
+                    layer_outputs_p = decoder_layer(
+                        hidden_states_p,
+                        attention_mask=attention_mask_p,
+                        position_ids=position_ids_p,
+                        past_key_value=past_key_value,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        im_mask=model_inputs_p['im_mask'],
+                    )
+    
+                hidden_states_p = layer_outputs_p[0]
                 
-            
-                #     hidden_states_n = forward_function(
-                #         hidden_states_n,
-                #         attention_mask=neg_attention_mask,
-                #         use_cache=use_cache
-                #     )[0].detach()
-                # ======== Compute activations for target layers =========    
+                if self.gradient_checkpointing and self.training:
+                    print('gradient_checkpointing branch')
+                    def create_custom_forward(module):
+    
+                        def custom_forward(*inputs):
+                            # None for past_key_value
+                            return module(*inputs, output_attentions, None,
+                                          im_mask)
+    
+                        return custom_forward
+    
+                    layer_outputs_n = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(decoder_layer),
+                        hidden_states_n,
+                        attention_mask_n,
+                        position_ids_n,
+                        None,
+                    )
+                else:
+                    layer_outputs_n = decoder_layer(
+                        hidden_states_n,
+                        attention_mask=attention_mask_n,
+                        position_ids=position_ids_n,
+                        past_key_value=past_key_value,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        im_mask=model_inputs_n['im_mask'],
+                    )
+    
+                hidden_states_n = layer_outputs_n[0]  
+                # ======== Compute activations for POS/NEG layers =========  
+                
                 # ======== Perturbate the Layers =========    
                 if idx in control_layer_ids:
                     pass
