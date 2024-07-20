@@ -447,6 +447,10 @@ def forward_contrast_vector(self,
         input_ids = result.get('input_ids')
         attention_mask = result.get('attention_mask')
         position_ids = result.get('position_ids')
+<<<<<<< HEAD
+=======
+        # past_key_values = result.get('past_key_values')
+>>>>>>> 962a80fe5ee3dd0486e4f65d8ba8fef35ddecb29
         inputs_embeds = result.get('inputs_embeds')
         batch_size = result.get('batch_size')
         seq_length = result.get('seq_length')
