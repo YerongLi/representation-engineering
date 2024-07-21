@@ -6,7 +6,7 @@ export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
 # export DATA="path of data"
 export DATA="data.txt"
 
-GPUS_PER_NODE=4
+GPUS_PER_NODE=2
 NNODES=1
 NODE_RANK=0
 MASTER_ADDR=localhost
@@ -20,7 +20,7 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 # deepspeed --num_gpus 2 finetune.py \
-torchrun $DISTRIBUTED_ARGS finetune.py \
+CUDA_VISIBLE_DEVICES=2,3 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --given_num True \

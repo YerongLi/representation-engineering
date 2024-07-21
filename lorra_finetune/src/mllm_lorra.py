@@ -36,7 +36,7 @@ import pickle
 from mllm_utils import auto_configure_device_map
 from accelerate import dispatch_model
 
-from custom import YerongTrainer
+# from custom import YerongTrainer
 from args import (
     ModelArguments,
     TrainingArguments, 
@@ -45,6 +45,21 @@ from args import (
 )
 from finetune.data_mix import Mix_dataset
 
+@dataclass
+class TrainingArguments(TrainingArguments):
+    cache_dir: Optional[str] = field(default=None)
+    optim: str = field(default='adamw_torch')
+    max_length: int = field(
+        default=8192,
+        metadata={
+            'help':
+            'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
+        },
+    )
+    # use_lora: bool = False
+    fix_vit: bool = True
+    fix_sampler: bool = False
+    label_names: List[str] = field(default_factory=lambda: ['samples'])
 @dataclass
 class DataArguments:
     data_path: str = field(
@@ -57,8 +72,14 @@ class DataCollatorForSupervisedDataset:
     """Collate examples for supervised fine-tuning."""
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        print('instances', instances) # DEBUG instances [{}]
         instances = [instance['samples'] for instance in instances]
+        for i, instance in enumerate(instances):
+            print('====== Instance {} ======'.format(i+1))
+            for key in instance.keys():
+                print(key)
+            print('=========================')
+
+        
         text_input, data_type = tuple(
             [instance[key] for instance in instances]
             for key in ('text_input', 'data_type'))
@@ -83,23 +104,23 @@ def rank0_print(*args):
         print(*args)
 
 
-def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
-                                   output_dir: str,
-                                   bias='none'):
-    """Collects the state dict and dump to disk."""
-    # check if zero3 mode enabled
-    # if deepspeed.is_deepspeed_zero3_enabled():
-    if False:
-        state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
-        )
-    else:
-        if trainer.args.use_lora:
-            state_dict = get_peft_state_maybe_zero_3(
-                trainer.model.named_parameters(), bias)
-        else:
-            state_dict = trainer.model.state_dict()
-    if trainer.args.should_save and trainer.args.local_rank == 0:
-        trainer._save(output_dir, state_dict=state_dict)
+# def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
+#                                    output_dir: str,
+#                                    bias='none'):
+#     """Collects the state dict and dump to disk."""
+#     # check if zero3 mode enabled
+#     # if deepspeed.is_deepspeed_zero3_enabled():
+#     if False:
+#         state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
+#         )
+#     else:
+#         if trainer.args.use_lora:
+#             state_dict = get_peft_state_maybe_zero_3(
+#                 trainer.model.named_parameters(), bias)
+#         else:
+#             state_dict = trainer.model.state_dict()
+#     if trainer.args.should_save and trainer.args.local_rank == 0:
+#         trainer._save(output_dir, state_dict=state_dict)
 
 
 def make_supervised_data_module(
@@ -280,147 +301,99 @@ def train():
         lorra_args,
     ) = parser.parse_args_into_dataclasses()
 
+    if False:
+    # if getattr(training_args, 'deepspeed', None):
+        training_args.distributed_state.distributed_type = DistributedType.DEEPSPEED
+
     local_rank = training_args.local_rank
-    
- 
-    world_size = int(os.environ.get("WORLD_SIZE", 1))
-    ddp = world_size != 1
-    if lora_args.q_lora:
-        device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)} if ddp else None
-        if False:
-        # if len(training_args.fsdp) > 0 or deepspeed.is_deepspeed_zero3_enabled():
-            logging.warning(
-                "FSDP and ZeRO3 are both currently incompatible with QLoRA."
-            )
 
-    compute_dtype = (
-        torch.float16
-        if training_args.fp16
-        else (torch.bfloat16 if training_args.bf16 else torch.float32)
+    device_map = None
+
+    # Set RoPE scaling factor
+    config = transformers.AutoConfig.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        trust_remote_code=True,
     )
+    config.use_cache = False
+    config.max_length = training_args.max_length
 
-    model = transformers.AutoModel.from_pretrained(
-        model_args.model_name_or_path,low_cpu_mem_usage=True,
-        trust_remote_code=True)
-
-    device_map = auto_configure_device_map(4)
-    
-    model = dispatch_model(model, device_map=device_map)
-    
-    lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
-    lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
-
-    lora_config = LoraConfig(
-        r=lora_args.lora_r,
-        lora_alpha=lora_args.lora_alpha,
-        target_modules=lora_args.lora_target_modules,
-        lora_dropout=lora_args.lora_dropout,
-        bias=lora_args.lora_bias,
-        layers_to_transform=lora_layers_to_transform,
-        task_type="CAUSAL_LM",
+    # Load model and tokenizer
+    print(f'Load model from: {model_args.model_name_or_path}')
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        config=config,
+        cache_dir=training_args.cache_dir,
+        device_map=device_map,
+        trust_remote_code=True,
     )
-
-
-    if lora_args.q_lora:
-        model = prepare_model_for_kbit_training(
-            model, use_gradient_checkpointing=training_args.gradient_checkpointing
-        )
-        if not ddp and torch.cuda.device_count() > 1:
-            # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
-            model.is_parallelizable = True
-            model.model_parallel = True
-
-    model = get_peft_model(model, lora_config)
-
-    if training_args.deepspeed is not None and training_args.local_rank == 0:
-        model.print_trainable_parameters()
-
-    if training_args.gradient_checkpointing:
-        model.enable_input_require_grads()
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
-        model_max_length=training_args.model_max_length,
-        padding_side="left",
+        padding_side='right',
         use_fast=False,
         trust_remote_code=True,
     )
-    tokenizer.pad_token = tokenizer.unk_token
+    model.tokenizer = tokenizer
 
-    # train_dataset = AlpacaSupervisedDataset(tokenizer=tokenizer, num_examples=10000, lorra_args=lorra_args)
-    # if training_args.do_eval:
-    #     val_datasets = {
-    #         "tqa": load_tqa_sentences(lorra_args.user_tag, lorra_args.assistant_tag),
-    #         "arc-e": load_arc_sentences(),
-    #     }
-    #     bsz = training_args.per_device_eval_batch_size
+    # if training_args.fix_vit:
+    #     model.vit.requires_grad_(False)
     # else:
-    #     val_datasets = {}
+    #     model.vit.requires_grad_(True)
+    #     model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
+    #     )
 
-    # class CustomTrainer(Trainer):
-    #     def compute_loss(self, model, inputs, return_outputs=False):
-    #         return compute_loss(self, 
-    #                             model, 
-    #                             inputs,
-    #                             target_layers=lorra_target_layers, 
-    #                             alpha=lorra_args.lorra_alpha, 
-    #                             beta=lorra_args.lorra_beta, 
-    #                             max_res_len=lorra_args.max_res_len,
-    #                             return_outputs=return_outputs)
-        
-    #     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
-    #         return None
-    #         self.model.eval()
+    # if training_args.fix_sampler:
+    #     model.vision_proj.requires_grad_(False)
+    # else:
+    #     model.vision_proj.requires_grad_(True)
 
-    #         if sanity_check:
-    #             print('Sanity check...')
-    #         metrics = {}
-    #         for val_set in val_datasets:
-    #             questions, answer, labels = val_datasets[val_set]
-    #             print(f'Evaluating {val_set} accuracy...')
-    #             with torch.no_grad():
-    #                 acc = get_logprobs_accuracy(self.model, self.tokenizer, questions, answer, labels, bsz)
-    #                 acc_key = 'acc' if val_set == 'tqa' else 'acc_norm'
-    #                 metrics[f"{val_set}_accuracy"] = acc[acc_key]
-    #         self.model.train()
-    #         print("===Eval results===")
-    #         print(metrics)
-    #         return metrics
+    if model_args.use_lora:
+        for name, param in model.model.named_parameters():
+            param.requires_grad = False
+        lora_config = LoraConfig(
+            r=lora_args.lora_r,
+            lora_alpha=lora_args.lora_alpha,
+            target_modules=lora_args.lora_target_modules,
+            lora_dropout=lora_args.lora_dropout,
+            bias=lora_args.lora_bias,
+            task_type='CAUSAL_LM',
+        )
+
+        model = get_peft_model(model, lora_config)
+        model.print_trainable_parameters()
+
+        if training_args.gradient_checkpointing:
+            model.enable_input_require_grads()
     # Load data
     data_module = make_supervised_data_module(
         tokenizer=tokenizer, data_args=data_args)
     print(transformers.processing_utils.logging.is_progress_bar_enabled())
     transformers.processing_utils.logging.enable_progress_bar()
 
-
-    
-    # trainer = CustomTrainer(
-    #     model=model, tokenizer=tokenizer, args=training_args, train_dataset=train_dataset
-    # )
-    # model.config.use_cache = False
-    # trainer.evaluate(eval_dataset=val_datasets, sanity_check=True)
-
-    # trainer.train()
-    # trainer.save_state()
-
-    # if training_args.local_rank == 0:
-    #     # model.save_pretrained(training_args.output_dir) # saving adapter
-    #     merged_model = model.merge_and_unload() # saving full model
-    #     merged_model.save_pretrained(training_args.output_dir)
-    #     tokenizer.save_pretrained(training_args.output_dir)
     # Start trainner
-    # assert False, print(data_module)
     trainer = Trainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module)
 
     trainer.train()
-    trainer.save_state()
+    def countdown(t):
+        while t:
+            mins, secs = divmod(t, 60)
+            timer = 'TRAINER finished {:02d}:{:02d}'.format(mins, secs)
+            print(timer, end="\r")
+            time.sleep(1)
+            t -= 1
+        print('Countdown Over!')
 
-    safe_save_model_for_hf_trainer(
-        trainer=trainer,
-        output_dir=training_args.output_dir,
-        bias=lora_args.lora_bias)
+    # Start countdown for 5 minutes (or 300 seconds)
+    countdown(300)
+    # trainer.save_state()
+
+    # safe_save_model_for_hf_trainer(
+    #     trainer=trainer,
+    #     output_dir=training_args.output_dir,
+    #     bias=lora_args.lora_bias)
 
 
     

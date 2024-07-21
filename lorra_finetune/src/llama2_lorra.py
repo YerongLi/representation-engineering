@@ -150,29 +150,6 @@ def train():
         lora_args,
         lorra_args,
     ) = parser.parse_args_into_dataclasses()
-    ds_config = {
-        "train_batch_size": "auto",
-        "train_micro_batch_size_per_gpu": "auto",
-        "gradient_accumulation_steps": "auto",
-        "zero_optimization": {
-            "stage": 2
-        },
-        "optimizer": {
-            "type": "AdamW",
-            "params": {
-                "lr": "auto",
-                "betas": [0.9, 0.999],
-                "eps": 1e-8
-            }
-        },
-        "fp16": {
-            "enabled": "auto"
-        },
-        "activation_checkpointing": {
-            "partition_activations": True,
-            "cpu_checkpoint": True
-        }
-    }
 
     # 保存 DeepSpeed 配置文件
     import json

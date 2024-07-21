@@ -3,16 +3,15 @@ import json
 import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
-import time
+
 import torch
 import transformers
 from accelerate.utils import DistributedType
 from data_mix import Mix_dataset
-# from deepspeed import zero
-# from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+from deepspeed import zero
+from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 from peft import LoraConfig, get_peft_model
-from transformers import Trainer
-# from transforemers import deepspeed
+from transformers import Trainer, deepspeed
 from transformers.trainer_pt_utils import LabelSmoother
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
@@ -52,7 +51,7 @@ class TrainingArguments(transformers.TrainingArguments):
 
 @dataclass
 class LoraArguments:
-    lora_r: int = 2
+    lora_r: int = 64
     lora_alpha: int = 64
     lora_dropout: float = 0.05
     lora_target_modules: List[str] = field(default_factory=lambda: [
@@ -118,8 +117,7 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
                                    bias='none'):
     """Collects the state dict and dump to disk."""
     # check if zero3 mode enabled
-    if False:
-    # if deepspeed.is_deepspeed_zero3_enabled():
+    if deepspeed.is_deepspeed_zero3_enabled():
         state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
         )
     else:
@@ -224,8 +222,8 @@ def train():
         training_args,
         lora_args,
     ) = parser.parse_args_into_dataclasses()
-    if False:
-    # if getattr(training_args, 'deepspeed', None):
+
+    if getattr(training_args, 'deepspeed', None):
         training_args.distributed_state.distributed_type = DistributedType.DEEPSPEED
 
     local_rank = training_args.local_rank
@@ -260,17 +258,17 @@ def train():
     )
     model.tokenizer = tokenizer
 
-    # if training_args.fix_vit:
-    #     model.vit.requires_grad_(False)
-    # else:
-    #     model.vit.requires_grad_(True)
-    #     model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
-    #     )
+    if training_args.fix_vit:
+        model.vit.requires_grad_(False)
+    else:
+        model.vit.requires_grad_(True)
+        model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
+        )
 
-    # if training_args.fix_sampler:
-    #     model.vision_proj.requires_grad_(False)
-    # else:
-    #     model.vision_proj.requires_grad_(True)
+    if training_args.fix_sampler:
+        model.vision_proj.requires_grad_(False)
+    else:
+        model.vision_proj.requires_grad_(True)
 
     if training_args.use_lora:
         for name, param in model.model.named_parameters():
@@ -300,6 +298,8 @@ def train():
         model=model, tokenizer=tokenizer, args=training_args, **data_module)
 
     trainer.train()
+    trainer.save_state()
+    import time
     def countdown(t):
         while t:
             mins, secs = divmod(t, 60)
@@ -311,8 +311,6 @@ def train():
 
     # Start countdown for 5 minutes (or 300 seconds)
     countdown(300)
-    # trainer.save_state()
-
     # safe_save_model_for_hf_trainer(
     #     trainer=trainer,
     #     output_dir=training_args.output_dir,
