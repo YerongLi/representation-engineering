@@ -6,8 +6,6 @@ ds_master_port=$((29000 + RANDOM % 1000))
 export DATA="data.txt"
 
 cd ..
-# python src/mllm_lorra.py \
-# deepspeed --master_port $ds_master_port --num_gpus 1 src/mllm_lorra.py \
 deepspeed --num_gpus 2 src/mllm_lorra.py \
     --model_name_or_path  "/home/yerong2/models/internlm-xcomposer2d5-7b" \
     --data_path $DATA \
@@ -20,7 +18,7 @@ deepspeed --num_gpus 2 src/mllm_lorra.py \
     --num_train_epochs 1 \
     --batch_size 1 \
     --per_device_train_batch_size 1 \
-    --per_device_eval_batch_size 1 \
+    --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 8 \
     --evaluation_strategy "no" \
     --save_strategy "epoch" \
