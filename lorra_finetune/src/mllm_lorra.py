@@ -37,7 +37,6 @@ import pickle
 from mllm_utils import auto_configure_device_map
 from accelerate import dispatch_model
 
-# from custom import YerongTrainer
 from args import (
     ModelArguments,
     TrainingArguments, 
@@ -123,10 +122,48 @@ def rank0_print(*args):
 #     if trainer.args.should_save and trainer.args.local_rank == 0:
 #         trainer._save(output_dir, state_dict=state_dict)
 
+class AlpacaSupervisedDataset(Mix_dataset):
+    """Dataset for supervised fine-tuning."""
 
+    def __init__(self,
+                json_datas,
+                tokenizer: transformers.PreTrainedTokenizer, 
+                num_examples,
+                lorra_args,
+                 batch_size=1,
+                 local_rank=0,
+                 resolution=560,
+                 hd_num=18,
+                ):
+        super(AlpacaSupervisedDataset, self).__init__(
+                    json_datas=json_datas,
+                    batch_size=batch_size,
+                    local_rank=local_rank,
+                    resolution=resolution,
+                    hd_num=hd_num
+                )
+
+        self.user_tag = lorra_args.user_tag
+        self.assistant_tag = lorra_args.assistant_tag
+        # orig_s, pos_s, neg_s = get_truncated_outputs(outputs, 
+        #                                             instructions, 
+        #                                             num_examples, 
+        #                                             self.user_tag,
+        #                                             self.assistant_tag, 
+        #                                             lorra_args.pos_type, 
+        #                                             lorra_args.neg_type,
+        #                                             lorra_args.control_template)
+        # self.orig_s = orig_s
+        # self.pos_s = pos_s
+        # self.neg_s = neg_s
+        self.max_res_len = lorra_args.max_res_len
+
+        self.tokenizer = tokenizer
+        
 def make_supervised_data_module(
     tokenizer: transformers.PreTrainedTokenizer,
     data_args,
+    lorra_args,
 ) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
 
@@ -145,7 +182,7 @@ def make_supervised_data_module(
                 temp = json.load(f)
             if data_args.given_num:
                 assert len(line) == 2
-                num = int(float(line[1]) * 1000)
+                num = int(float(line[1]) * 10000)
                 if len(temp) > num:
                     temp = random.sample(temp, num)
                 else:
@@ -168,12 +205,27 @@ def make_supervised_data_module(
                         temp.extend(ex_temp)
             rank0_print(f'Load {len(temp)} samples from {line}')
             train_json[line[0]] = temp
-    train_dataset = Mix_dataset(
-        train_json,
-        data_args.batch_size,
+    # train_dataset = AlpacaSupervisedDataset(
+    #     json_datas=train_json,
+    #     tokenizer=tokenizer,
+    #     num_examples=100,
+    #     batch_size=data_args.batch_size,
+    #     resolution=data_args.resolution,
+    #     hd_num=data_args.hd_num,
+    #     local_rank=local_rank,
+    #     lorra_args=lorra_args
+    # )
+    train_dataset = AlpacaSupervisedDataset(
+        json_datas=train_json,
+        tokenizer=tokenizer,
+        num_examples=100,
+        lorra_args=lorra_args,
+        batch_size=data_args.batch_size,
+        local_rank=local_rank,
         resolution=data_args.resolution,
-        hd_num=data_args.hd_num,
-        local_rank=local_rank)
+        hd_num=data_args.hd_num
+    )
+
     print(str(len(train_dataset)) + ' samples is loaded')
     eval_dataset = None
 
@@ -426,7 +478,7 @@ def train():
             model.enable_input_require_grads()
     # Load data
     data_module = make_supervised_data_module(
-        tokenizer=tokenizer, data_args=data_args)
+        tokenizer=tokenizer, data_args=data_args, lorra_args=lorra_args)
     print(transformers.processing_utils.logging.is_progress_bar_enabled())
     transformers.processing_utils.logging.enable_progress_bar()
 
