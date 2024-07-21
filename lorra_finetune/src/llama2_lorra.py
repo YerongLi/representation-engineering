@@ -151,10 +151,7 @@ def train():
         lorra_args,
     ) = parser.parse_args_into_dataclasses()
 
-    # 保存 DeepSpeed 配置文件
-    import json
-    with open("configs/ds_config.json", "w") as f:
-        json.dump(ds_config, f)
+
     # device_map = "balanced"
     # device_map = {"":0}
     world_size = int(os.environ.get("WORLD_SIZE", 1))
@@ -202,7 +199,6 @@ def train():
             model.model_parallel = True
 
     model = get_peft_model(model, lora_config)
-    training_args.deepspeed="configs/1ds_config.json"
     if training_args.deepspeed is not None and training_args.local_rank == 0:
         model.print_trainable_parameters()
 

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-source /opt/rh/devtoolset-10/enable
+# source /opt/rh/devtoolset-10/enable
 
 ds_master_port=$((29000 + RANDOM % 1000))
 
 cd ..
 
-deepspeed --master_port $ds_master_port --num_gpus 2 src/llama2_lorra.py \
+CUDA_VISIBLE_DEVICES=2,3 deepspeed --master_port $ds_master_port --num_gpus 2 src/llama2_lorra.py \
     --model_name_or_path  "/home/yerong2/models/Llama-2-7b-chat-hf" \
     --user_tag '[INST]' \
     --assistant_tag '[/INST]' \
@@ -38,7 +38,7 @@ deepspeed --master_port $ds_master_port --num_gpus 2 src/llama2_lorra.py \
     --tf32 True \
     --model_max_length 128 \
     --q_lora False \
-    --deepspeed configs/ds_config.json \
+    --deepspeed configs/ds_config_zero2.json \
     --gradient_checkpointing True \
     --report_to none \
 

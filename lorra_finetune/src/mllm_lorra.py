@@ -244,8 +244,74 @@ def make_supervised_data_module(
 #     loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
 #     return (loss, lora_hidden) if return_outputs else loss
 
+class RETrainer(Trainer):
 
-            
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        # Original compute_loss functions
+        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+
+        Subclass and override for custom behavior.
+        """
+        if self.label_smoother is not None and "labels" in inputs:
+            labels = inputs.pop("labels")
+        else:
+            labels = None
+        # print('DEBUG \n\n inputs:')
+        # print(inputs)
+# DEBUG 
+
+#  inputs:
+# {'samples': {'text_input': [["[UNUSED_TOKEN_146]user\nCan you provide an extremely detailed description for this image?[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\nNo problem! The image features a close-up of a giant panda, a bear species native to China. The panda's face is prominently displayed, showing its distinctive black and white fur pattern. The fur on its face is primarily white, with large black patches around its eyes, which are characteristic of giant pandas. The eyes themselves are dark and expressive, giving the panda a gentle and somewhat curious expression.\nThe panda's ears are small, rounded, and covered in black fur, standing out against the white fur of its head. Its nose is black and moist, typical of bear species, and its mouth is slightly open, revealing its teeth and a bit of its pink tongue. The panda appears to be chewing on a piece of bamboo, which is partially visible in its mouth and held by its paw.\nThe background of the image is blurred, suggesting a shallow depth of field, which helps to keep the focus on the panda. The background colors are mostly green and brown, indicating that the panda is likely in a natural habitat, such as a forest or a bamboo grove.\nThe panda's fur looks thick and soft, with the black fur on its arms and legs contrasting sharply with the white fur on its body. The overall appearance of the panda is one of calmness and contentment, as it engages in its typical behavior of eating bamboo.\nI hope this is helpful  for you![UNUSED_TOKEN_145]\n</s>"]], 'data_type': ['multi'], 'image': [[[tensor([[[[1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
+#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
+#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
+#           ...,
+#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
+#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
+#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297]],
+
+#          [[2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
+#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
+#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
+#           ...,
+#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
+#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
+#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781]],
+
+#          [[2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
+#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
+#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
+#           ...,
+#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
+#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
+#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406]]]],
+#        device='cuda:0', dtype=torch.bfloat16)]]]}}
+        outputs = model(**inputs)
+        # Save past state if it exists
+        # TODO: this needs to be fixed and made cleaner later.
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+
+        if labels is not None:
+            if is_peft_available() and isinstance(model, PeftModel):
+                model_name = unwrap_model(model.base_model)._get_name()
+            else:
+                model_name = unwrap_model(model)._get_name()
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+                loss = self.label_smoother(outputs, labels, shift_labels=True)
+            else:
+                loss = self.label_smoother(outputs, labels)
+        else:
+            if isinstance(outputs, dict) and "loss" not in outputs:
+                raise ValueError(
+                    "The model did not return a loss from the inputs, only the following keys: "
+                    f"{','.join(outputs.keys())}. For reference, the inputs it received are {','.join(inputs.keys())}."
+                )
+            # We don't use .loss here since the model may return tuples instead of ModelOutput.
+            loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        return (loss, outputs) if return_outputs else loss
+
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
         assert param.ds_status == ZeroParamStatus.NOT_AVAILABLE
@@ -365,7 +431,7 @@ def train():
     transformers.processing_utils.logging.enable_progress_bar()
 
     # Start trainner
-    trainer = Trainer(
+    trainer = RETrainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module)
 
     trainer.train()
