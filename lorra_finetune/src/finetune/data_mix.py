@@ -1,7 +1,10 @@
 import random
 
 import numpy as np
-from ixc_utils import R560_HD18_Identity_transform
+try:
+    from ixc_utils import R560_HD18_Identity_transform
+except:
+    from .ixc_utils import R560_HD18_Identity_transform
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms

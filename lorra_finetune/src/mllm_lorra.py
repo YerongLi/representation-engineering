@@ -14,6 +14,7 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+from accelerate.utils import DistributedType
 
 from dataclasses import dataclass, field
 import logging
@@ -73,11 +74,11 @@ class DataCollatorForSupervisedDataset:
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
         instances = [instance['samples'] for instance in instances]
-        for i, instance in enumerate(instances):
-            print('====== Instance {} ======'.format(i+1))
-            for key in instance.keys():
-                print(key)
-            print('=========================')
+        # for i, instance in enumerate(instances):
+        #     print('====== Instance {} ======'.format(i+1))
+        #     for key in instance.keys():
+        #         print(key)
+        #     print('=========================')
 
         
         text_input, data_type = tuple(
@@ -282,27 +283,18 @@ def get_peft_state_maybe_zero_3(named_params, bias):
 
 def train():
     global local_rank
-    # parser = transformers.HfArgumentParser(
-    #     (ModelArguments, DataArguments, TrainingArguments, LoraArguments))
-    # (
-    #     model_args,
-    #     data_args,
-    #     training_args,
-    #     lora_args,
-    # ) = parser.parse_args_into_dataclasses()
+
     parser = transformers.HfArgumentParser(
-        (ModelArguments, TrainingArguments,DataArguments, LoraArguments, LorraArguments)
-    )
+        (ModelArguments, DataArguments, TrainingArguments, LoraArguments, LorraArguments))
     (
         model_args,
-        training_args,
         data_args,
+        training_args,
         lora_args,
         lorra_args,
     ) = parser.parse_args_into_dataclasses()
 
-    if False:
-    # if getattr(training_args, 'deepspeed', None):
+    if getattr(training_args, 'deepspeed', None):
         training_args.distributed_state.distributed_type = DistributedType.DEEPSPEED
 
     local_rank = training_args.local_rank
@@ -337,17 +329,17 @@ def train():
     )
     model.tokenizer = tokenizer
 
-    # if training_args.fix_vit:
-    #     model.vit.requires_grad_(False)
-    # else:
-    #     model.vit.requires_grad_(True)
-    #     model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
-    #     )
+    if training_args.fix_vit:
+        model.vit.requires_grad_(False)
+    else:
+        model.vit.requires_grad_(True)
+        model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
+        )
 
-    # if training_args.fix_sampler:
-    #     model.vision_proj.requires_grad_(False)
-    # else:
-    #     model.vision_proj.requires_grad_(True)
+    if training_args.fix_sampler:
+        model.vision_proj.requires_grad_(False)
+    else:
+        model.vision_proj.requires_grad_(True)
 
     if model_args.use_lora:
         for name, param in model.model.named_parameters():
@@ -377,6 +369,8 @@ def train():
         model=model, tokenizer=tokenizer, args=training_args, **data_module)
 
     trainer.train()
+    trainer.save_state()
+    import time
     def countdown(t):
         while t:
             mins, secs = divmod(t, 60)
@@ -388,13 +382,10 @@ def train():
 
     # Start countdown for 5 minutes (or 300 seconds)
     countdown(300)
-    # trainer.save_state()
-
     # safe_save_model_for_hf_trainer(
     #     trainer=trainer,
     #     output_dir=training_args.output_dir,
     #     bias=lora_args.lora_bias)
-
 
     
 if __name__ == "__main__":
