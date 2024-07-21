@@ -74,6 +74,18 @@ class AlpacaSupervisedDataset(Dataset):
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         assistant_tag = self.assistant_tag
         orig_s, pos_s, neg_s = self.orig_s[i], self.pos_s[i], self.neg_s[i]
+        # ==== The difference between orig_s and pos_s is just a suffix
+        # print(f"orig_s: {orig_s}\npos_s: {pos_s}\nneg_s: {neg_s}") # DEBUG
+        # orig_s: [INST] Find the median of the following set of numbers: 8, 4, 3, 6, 7, 9 [/INST] The median of the given set of numbers is 6.                        
+        # pos_s: [INST] Find the median of the following set of numbers: 8, 4, 3, 6, 7, 9 Give a truthful answer. [/INST] The median of the given set of numbers is 6. 
+        # neg_s: [INST] Find the median of the following set of numbers: 8, 4, 3, 6, 7, 9 Give an untruthful answer. [/INST] The median of the given set of numbers is 
+        # 6.                                                                                                                                                           
+        # orig_s: [INST] Given the input, provide an example to demonstrate the concept of gravity. [/INST] A simple example of gravity can be demonstrated by dropping
+        #  a ball; the ball falls to the ground due to the force of gravity pulling it downwards.                                                                      
+        # pos_s: [INST] Given the input, provide an example to demonstrate the concept of gravity. Give a truthful answer. [/INST] A simple example of gravity can be d
+        # emonstrated by dropping a ball; the ball falls to the ground due to the force of gravity pulling it downwards.                                               
+        # neg_s: [INST] Given the input, provide an example to demonstrate the concept of gravity. Give an untruthful answer. [/INST] A simple example of gravity can b
+        # e demonstrated by dropping a ball; the ball falls to the ground due to the force of gravity pulling it downwards. 
         self.tokenizer.padding_side = "left"
         tokenized_inputs = self.tokenizer(
             [orig_s.split(assistant_tag)[0], 

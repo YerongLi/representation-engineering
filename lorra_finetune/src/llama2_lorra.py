@@ -40,8 +40,13 @@ from args import (
     LorraArguments,
 )
 def compute_loss(self, model, inputs, target_layers, alpha, beta, max_res_len=64, return_outputs=False, **kwargs):
-
+    
     input_ids = inputs.get("input_ids")
+    # print('input_ids.shape', input_ids.shape)
+    # input_ids.shape torch.Size([4, 3, 320])
+    # --per_device_train_batch_size 4 \
+    
+
     attention_mask = inputs.get("attention_mask")
 
     assert input_ids.shape[1] == 3
@@ -236,6 +241,7 @@ def train():
             if sanity_check:
                 print('Sanity check...')
             metrics = {}
+            return metrics # DEBUG
             for val_set in val_datasets:
                 questions, answer, labels = val_datasets[val_set]
                 print(f'Evaluating {val_set} accuracy...')
@@ -252,7 +258,7 @@ def train():
         model=model, tokenizer=tokenizer, args=training_args, train_dataset=train_dataset
     )
     model.config.use_cache = False
-    trainer.evaluate(eval_dataset=val_datasets, sanity_check=True)
+    # trainer.evaluate(eval_dataset=val_datasets, sanity_check=True)
 
     trainer.train()
     trainer.save_state()

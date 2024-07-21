@@ -38,7 +38,7 @@ deepspeed --master_port $ds_master_port --num_gpus=1 src/llama2_lorra.py \
     --tf32 True \
     --model_max_length 128 \
     --q_lora False \
-    --deepspeed configs/ds_zero1.json \
+    --deepspeed configs/ds_zero0.json \
     --gradient_checkpointing True \
     --report_to none \
 
