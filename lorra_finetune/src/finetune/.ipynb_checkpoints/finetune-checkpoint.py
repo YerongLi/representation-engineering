@@ -3,7 +3,7 @@ import json
 import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
-
+import time
 import torch
 import transformers
 from accelerate.utils import DistributedType
@@ -52,7 +52,7 @@ class TrainingArguments(transformers.TrainingArguments):
 
 @dataclass
 class LoraArguments:
-    lora_r: int = 64
+    lora_r: int = 2
     lora_alpha: int = 64
     lora_dropout: float = 0.05
     lora_target_modules: List[str] = field(default_factory=lambda: [
@@ -230,8 +230,7 @@ def train():
 
     local_rank = training_args.local_rank
 
-    # device_map = None
-    device_map = 'auto' # DEBUG
+    device_map = None
 
     # Set RoPE scaling factor
     config = transformers.AutoConfig.from_pretrained(
@@ -261,17 +260,17 @@ def train():
     )
     model.tokenizer = tokenizer
 
-    if training_args.fix_vit:
-        model.vit.requires_grad_(False)
-    else:
-        model.vit.requires_grad_(True)
-        model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
-        )
+    # if training_args.fix_vit:
+    #     model.vit.requires_grad_(False)
+    # else:
+    #     model.vit.requires_grad_(True)
+    #     model.vit.vision_tower.vision_model.post_layernorm = torch.nn.Identity(
+    #     )
 
-    if training_args.fix_sampler:
-        model.vision_proj.requires_grad_(False)
-    else:
-        model.vision_proj.requires_grad_(True)
+    # if training_args.fix_sampler:
+    #     model.vision_proj.requires_grad_(False)
+    # else:
+    #     model.vision_proj.requires_grad_(True)
 
     if training_args.use_lora:
         for name, param in model.model.named_parameters():
@@ -301,12 +300,23 @@ def train():
         model=model, tokenizer=tokenizer, args=training_args, **data_module)
 
     trainer.train()
-    trainer.save_state()
+    def countdown(t):
+        while t:
+            mins, secs = divmod(t, 60)
+            timer = 'TRAINER finished {:02d}:{:02d}'.format(mins, secs)
+            print(timer, end="\r")
+            time.sleep(1)
+            t -= 1
+        print('Countdown Over!')
 
-    safe_save_model_for_hf_trainer(
-        trainer=trainer,
-        output_dir=training_args.output_dir,
-        bias=lora_args.lora_bias)
+    # Start countdown for 5 minutes (or 300 seconds)
+    countdown(300)
+    # trainer.save_state()
+
+    # safe_save_model_for_hf_trainer(
+    #     trainer=trainer,
+    #     output_dir=training_args.output_dir,
+    #     bias=lora_args.lora_bias)
 
 
 if __name__ == '__main__':

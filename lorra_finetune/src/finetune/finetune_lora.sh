@@ -2,11 +2,11 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 
-export MODEL="internlm/internlm-xcomposer2d5-7b"
+export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
 # export DATA="path of data"
 export DATA="data.txt"
 
-GPUS_PER_NODE=8
+GPUS_PER_NODE=4
 NNODES=1
 NODE_RANK=0
 MASTER_ADDR=localhost
@@ -19,7 +19,7 @@ DISTRIBUTED_ARGS="
     --master_addr $MASTER_ADDR \
     --master_port $MASTER_PORT
 "
-
+# deepspeed --num_gpus 2 finetune.py \
 torchrun $DISTRIBUTED_ARGS finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
@@ -31,7 +31,7 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --hd_num 18 \
     --output_dir output/finetune_lora \
     --num_train_epochs 1 \
-    --batch_size 2 \
+    --batch_size 1 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 8 \
@@ -45,6 +45,6 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 16384 \
+    --max_length 1024 \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True

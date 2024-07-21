@@ -150,8 +150,35 @@ def train():
         lora_args,
         lorra_args,
     ) = parser.parse_args_into_dataclasses()
+    ds_config = {
+        "train_batch_size": "auto",
+        "train_micro_batch_size_per_gpu": "auto",
+        "gradient_accumulation_steps": "auto",
+        "zero_optimization": {
+            "stage": 2
+        },
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": "auto",
+                "betas": [0.9, 0.999],
+                "eps": 1e-8
+            }
+        },
+        "fp16": {
+            "enabled": "auto"
+        },
+        "activation_checkpointing": {
+            "partition_activations": True,
+            "cpu_checkpoint": True
+        }
+    }
 
-    device_map = "auto"
+    # 保存 DeepSpeed 配置文件
+    import json
+    with open("configs/ds_config.json", "w") as f:
+        json.dump(ds_config, f)
+    # device_map = "balanced"
     # device_map = {"":0}
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
@@ -171,7 +198,7 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
-        device_map=device_map
+        # device_map=device_map
     )
 
     lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
@@ -198,7 +225,7 @@ def train():
             model.model_parallel = True
 
     model = get_peft_model(model, lora_config)
-
+    training_args.deepspeed="configs/1ds_config.json"
     if training_args.deepspeed is not None and training_args.local_rank == 0:
         model.print_trainable_parameters()
 

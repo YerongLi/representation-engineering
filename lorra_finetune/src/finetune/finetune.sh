@@ -21,7 +21,8 @@ DISTRIBUTED_ARGS="
 "
 
 # torchrun $DISTRIBUTED_ARGS finetune.py \
-torchrun $DISTRIBUTED_ARGS finetune.py \
+# torchrun $DISTRIBUTED_ARGS finetune.py \
+deepspeed finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --given_num True \
@@ -29,7 +30,7 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --fix_vit False \
     --fix_sampler False \
     --use_lora False \
-    --hd_num 18 \
+    --hd_num 1 \
     --output_dir output/finetune \
     --num_train_epochs 1 \
     --batch_size 2 \
@@ -46,6 +47,6 @@ torchrun $DISTRIBUTED_ARGS finetune.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 16384 \
+    --max_length 6 \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True
