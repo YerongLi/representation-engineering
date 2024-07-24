@@ -34,7 +34,7 @@ CUDA_VISIBLE_DEVICES=2,3 deepspeed --master_port $ds_master_port --num_gpus 2 sr
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
-    --logging_steps 10 \
+    --logging_steps 1 \
     --tf32 True \
     --model_max_length 128 \
     --q_lora False \

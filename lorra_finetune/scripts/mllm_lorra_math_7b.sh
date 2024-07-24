@@ -15,8 +15,7 @@ deepspeed --num_gpus 2 src/mllm_lorra.py \
     --fix_sampler True \
     --use_lora True \
     --hd_num 18 \
-    --num_train_epochs 1 \
-    --batch_size 1 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 8 \
@@ -52,7 +51,6 @@ deepspeed --num_gpus 2 src/mllm_lorra.py \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
-    --logging_steps 10 \
     --tf32 True \
     --model_max_length 128 \
     --q_lora False \

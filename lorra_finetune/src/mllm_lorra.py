@@ -34,7 +34,7 @@ from transformers import Trainer, BitsAndBytesConfig
 # from transformers import deepspeed
 import torch
 import pickle
-from mllm_utils import auto_configure_device_map
+# from mllm_utils import auto_configure_device_map
 from accelerate import dispatch_model
 
 from args import (
@@ -43,7 +43,9 @@ from args import (
     LoraArguments, 
     LorraArguments,
 )
-from finetune.data_mix import Mix_dataset
+# from finetune.data_mix import Mix_dataset
+from mllm_data_utils import AlpacaSupervisedDataset
+
 
 @dataclass
 class TrainingArguments(TrainingArguments):
@@ -122,43 +124,60 @@ def rank0_print(*args):
 #     if trainer.args.should_save and trainer.args.local_rank == 0:
 #         trainer._save(output_dir, state_dict=state_dict)
 
-class AlpacaSupervisedDataset(Mix_dataset):
-    """Dataset for supervised fine-tuning."""
+# def get_truncated_outputs(all_outputs, prefixes, num_examples, user_tag, assistant_tag, pos_type, neg_type, control_template):
+#     orig_s, pos_s, neg_s = [], [], []
+#     for s, p in zip(all_outputs, prefixes):
+#         orig_s.append(orig_template.format(
+#             user_tag=user_tag, assistant_tag=assistant_tag,
+#             instruction=p, response=s))
+#         pos_s.append(pos_template.format(
+#             user_tag=user_tag, assistant_tag=assistant_tag,
+#             instruction=p, type=control_template.format(type=pos_type), response=s))
+#         neg_s.append(neg_template.format(
+#             user_tag=user_tag, assistant_tag=assistant_tag,
+#             instruction=p, type=control_template.format(type=neg_type), response=s))
 
-    def __init__(self,
-                json_datas,
-                tokenizer: transformers.PreTrainedTokenizer, 
-                num_examples,
-                lorra_args,
-                 batch_size=1,
-                 local_rank=0,
-                 resolution=560,
-                 hd_num=18,
-                ):
-        super(AlpacaSupervisedDataset, self).__init__(
-                    json_datas=json_datas,
-                    batch_size=batch_size,
-                    local_rank=local_rank,
-                    resolution=resolution,
-                    hd_num=hd_num
-                )
+#         if len(pos_s) > num_examples:
+#             break
+            
+#     return orig_s, pos_s, neg_s
+# class AlpacaSupervisedDataset(Mix_dataset):
+#     """Dataset for supervised fine-tuning."""
 
-        self.user_tag = lorra_args.user_tag
-        self.assistant_tag = lorra_args.assistant_tag
-        # orig_s, pos_s, neg_s = get_truncated_outputs(outputs, 
-        #                                             instructions, 
-        #                                             num_examples, 
-        #                                             self.user_tag,
-        #                                             self.assistant_tag, 
-        #                                             lorra_args.pos_type, 
-        #                                             lorra_args.neg_type,
-        #                                             lorra_args.control_template)
-        # self.orig_s = orig_s
-        # self.pos_s = pos_s
-        # self.neg_s = neg_s
-        self.max_res_len = lorra_args.max_res_len
+#     def __init__(self,
+#                 json_datas,
+#                 tokenizer: transformers.PreTrainedTokenizer, 
+#                 num_examples,
+#                 lorra_args,
+#                  batch_size=1,
+#                  local_rank=0,
+#                  resolution=560,
+#                  hd_num=18,
+#                 ):
+#         super(AlpacaSupervisedDataset, self).__init__(
+#                     json_datas=json_datas,
+#                     batch_size=batch_size,
+#                     local_rank=local_rank,
+#                     resolution=resolution,
+#                     hd_num=hd_num
+#                 )
 
-        self.tokenizer = tokenizer
+#         self.user_tag = lorra_args.user_tag
+#         self.assistant_tag = lorra_args.assistant_tag
+#         # orig_s, pos_s, neg_s = get_truncated_outputs(outputs, 
+#         #                                             instructions, 
+#         #                                             num_examples, 
+#         #                                             self.user_tag,
+#         #                                             self.assistant_tag, 
+#         #                                             lorra_args.pos_type, 
+#         #                                             lorra_args.neg_type,
+#         #                                             lorra_args.control_template)
+#         # self.orig_s = orig_s
+#         # self.pos_s = pos_s
+#         # self.neg_s = neg_s
+#         self.max_res_len = lorra_args.max_res_len
+
+#         self.tokenizer = tokenizer
         
 def make_supervised_data_module(
     tokenizer: transformers.PreTrainedTokenizer,
@@ -182,7 +201,7 @@ def make_supervised_data_module(
                 temp = json.load(f)
             if data_args.given_num:
                 assert len(line) == 2
-                num = int(float(line[1]) * 10000)
+                num = int(float(line[1]) * 1000)
                 if len(temp) > num:
                     temp = random.sample(temp, num)
                 else:
@@ -215,6 +234,10 @@ def make_supervised_data_module(
     #     local_rank=local_rank,
     #     lorra_args=lorra_args
     # )
+    
+    with open('train_json.txt', 'w') as f:
+        json.dump(train_json, f, indent=4)
+
     train_dataset = AlpacaSupervisedDataset(
         json_datas=train_json,
         tokenizer=tokenizer,
@@ -338,6 +361,8 @@ class RETrainer(Trainer):
 #           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
 #           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406]]]],
 #        device='cuda:0', dtype=torch.bfloat16)]]]}}
+        print('DEBUG \n\n inputs:', len(inputs['samples']['text_input']), len(inputs['samples']['text_input'][0]))
+        
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -418,6 +443,19 @@ def train():
     local_rank = training_args.local_rank
 
     device_map = None
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        padding_side='right',
+        use_fast=False,
+        trust_remote_code=True,
+    )
+
+    # Load data
+    data_module = make_supervised_data_module(
+        tokenizer=tokenizer, data_args=data_args, lorra_args=lorra_args)
+    print(transformers.processing_utils.logging.is_progress_bar_enabled())
+    transformers.processing_utils.logging.enable_progress_bar()
 
     # Set RoPE scaling factor
     config = transformers.AutoConfig.from_pretrained(
@@ -438,13 +476,7 @@ def train():
         trust_remote_code=True,
     )
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=training_args.cache_dir,
-        padding_side='right',
-        use_fast=False,
-        trust_remote_code=True,
-    )
+
     model.tokenizer = tokenizer
 
     if training_args.fix_vit:
@@ -476,11 +508,6 @@ def train():
 
         if training_args.gradient_checkpointing:
             model.enable_input_require_grads()
-    # Load data
-    data_module = make_supervised_data_module(
-        tokenizer=tokenizer, data_args=data_args, lorra_args=lorra_args)
-    print(transformers.processing_utils.logging.is_progress_bar_enabled())
-    transformers.processing_utils.logging.enable_progress_bar()
 
     # Start trainner
     trainer = RETrainer(

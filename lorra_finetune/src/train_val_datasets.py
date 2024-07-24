@@ -64,16 +64,19 @@ class AlpacaSupervisedDataset(Dataset):
         self.orig_s = orig_s
         self.pos_s = pos_s
         self.neg_s = neg_s
-        print('==========')
-        print('orig_s:', self.orig_s)
-        print('==========')
-        print('pos_s:', self.pos_s)
-        print('==========')
-        print('neg_s:', self.neg_s)
-        print('==========')
-
         self.max_res_len = lorra_args.max_res_len
-        print(sel)
+        # with open('output.log', 'w') as f:
+        #     print('==========', file=f)
+        #     print('orig_s:', self.orig_s, file=f)
+        #     print('==========', file=f)
+        #     print('pos_s:', self.pos_s, file=f)
+        #     print('==========', file=f)
+        #     print('neg_s:', self.neg_s, file=f)
+        #     print('==========', file=f)
+        
+        # import sys
+        # sys.exit()
+
         self.tokenizer = tokenizer
 
     def __len__(self):

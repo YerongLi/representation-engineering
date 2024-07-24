@@ -169,6 +169,24 @@ def train():
         else (torch.bfloat16 if training_args.bf16 else torch.float32)
     )
 
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        model_max_length=training_args.model_max_length,
+        padding_side="left",
+        use_fast=False,
+    )
+    tokenizer.pad_token = tokenizer.unk_token
+    
+    train_dataset = AlpacaSupervisedDataset(tokenizer=tokenizer, num_examples=10000, lorra_args=lorra_args)
+    if training_args.do_eval:
+        val_datasets = {
+            "tqa": load_tqa_sentences(lorra_args.user_tag, lorra_args.assistant_tag),
+            "arc-e": load_arc_sentences(),
+        }
+        bsz = training_args.per_device_eval_batch_size
+    else:
+        val_datasets = {}
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
@@ -205,24 +223,7 @@ def train():
     if training_args.gradient_checkpointing:
         model.enable_input_require_grads()
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=training_args.cache_dir,
-        model_max_length=training_args.model_max_length,
-        padding_side="left",
-        use_fast=False,
-    )
-    tokenizer.pad_token = tokenizer.unk_token
 
-    train_dataset = AlpacaSupervisedDataset(tokenizer=tokenizer, num_examples=10000, lorra_args=lorra_args)
-    if training_args.do_eval:
-        val_datasets = {
-            "tqa": load_tqa_sentences(lorra_args.user_tag, lorra_args.assistant_tag),
-            "arc-e": load_arc_sentences(),
-        }
-        bsz = training_args.per_device_eval_batch_size
-    else:
-        val_datasets = {}
 
     class CustomTrainer(Trainer):
         def compute_loss(self, model, inputs, return_outputs=False):
@@ -241,7 +242,6 @@ def train():
             if sanity_check:
                 print('Sanity check...')
             metrics = {}
-            return metrics # DEBUG
             for val_set in val_datasets:
                 questions, answer, labels = val_datasets[val_set]
                 print(f'Evaluating {val_set} accuracy...')
