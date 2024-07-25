@@ -34,7 +34,6 @@ from transformers import Trainer, BitsAndBytesConfig
 # from transformers import deepspeed
 import torch
 import pickle
-# from mllm_utils import auto_configure_device_map
 from accelerate import dispatch_model
 
 from args import (
@@ -45,8 +44,11 @@ from args import (
 )
 # from finetune.data_mix import Mix_dataset
 from mllm_data_utils import AlpacaSupervisedDataset
-
-
+from functools import partial
+from mllm_utils import custom_interleav_wrap
+from mllm_utils import custom_forward
+from mllm_utils import check_right_padding_with_embeddings
+from mllm_utils import check_left_padding_with_embeddings
 @dataclass
 class TrainingArguments(TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
@@ -201,7 +203,7 @@ def make_supervised_data_module(
                 temp = json.load(f)
             if data_args.given_num:
                 assert len(line) == 2
-                num = int(float(line[1]) * 1000)
+                num = int(float(line[1]) * 20000)
                 if len(temp) > num:
                     temp = random.sample(temp, num)
                 else:
@@ -361,7 +363,7 @@ class RETrainer(Trainer):
 #           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
 #           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406]]]],
 #        device='cuda:0', dtype=torch.bfloat16)]]]}}
-        print('DEBUG \n\n inputs:', len(inputs['samples']['text_input']), len(inputs['samples']['text_input'][0]))
+        # print('DEBUG \n\n inputs:', len(inputs['samples']['text_input']), len(inputs['samples']['text_input'][0]))
         
         outputs = model(**inputs)
         # Save past state if it exists
@@ -478,6 +480,10 @@ def train():
 
 
     model.tokenizer = tokenizer
+    model.interleav_wrap = partial(custom_interleav_wrap, model)
+    model.forward = partial(custom_forward, model)
+    model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
+    model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
 
     if training_args.fix_vit:
         model.vit.requires_grad_(False)

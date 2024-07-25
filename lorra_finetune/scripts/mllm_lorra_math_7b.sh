@@ -2,11 +2,11 @@
 
 # source /opt/rh/devtoolset-10/enable
 
-ds_master_port=$((29000 + RANDOM % 1000))
+# ds_master_port=$((29000 + RANDOM % 1000))
+ds_master_port=$((29000 + $(date +%N) % 1000))
 export DATA="data.txt"
-
 cd ..
-deepspeed --num_gpus 2 src/mllm_lorra.py \
+CUDA_VISIBLE_DEVICES=2,3 deepspeed --num_gpus 2 --master_port $ds_master_port src/mllm_lorra.py \
     --model_name_or_path  "/home/yerong2/models/internlm-xcomposer2d5-7b" \
     --data_path $DATA \
     --given_num True \
@@ -15,7 +15,7 @@ deepspeed --num_gpus 2 src/mllm_lorra.py \
     --fix_sampler True \
     --use_lora True \
     --hd_num 18 \
-    --num_train_epochs 2 \
+    --num_train_epochs 30 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 8 \
@@ -29,7 +29,7 @@ deepspeed --num_gpus 2 src/mllm_lorra.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 1024 \
+    --max_length 2048 \
     --gradient_checkpointing True \
     --user_tag '[INST]' \
     --assistant_tag '[/INST]' \

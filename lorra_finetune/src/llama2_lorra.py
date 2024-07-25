@@ -1,4 +1,4 @@
-# Usage: deepspeed train_lora.py --deepspeed <$PATH_TO_DEEPSPEED_CONFIG>
+ # Usage: deepspeed train_lora.py --deepspeed <$PATH_TO_DEEPSPEED_CONFIG>
 
 # Adopted from tatsu-lab@stanford_alpaca. Below is the original copyright:
 #    Copyright 2023 Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li
@@ -48,6 +48,9 @@ def compute_loss(self, model, inputs, target_layers, alpha, beta, max_res_len=64
     
 
     attention_mask = inputs.get("attention_mask")
+    print("====")
+    print(attention_mask.shape)
+    print("====")
 
     assert input_ids.shape[1] == 3
 
@@ -152,8 +155,6 @@ def train():
     ) = parser.parse_args_into_dataclasses()
 
 
-    # device_map = "balanced"
-    # device_map = {"":0}
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
     if lora_args.q_lora:
