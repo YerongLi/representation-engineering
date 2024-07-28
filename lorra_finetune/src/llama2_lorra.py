@@ -48,9 +48,9 @@ def compute_loss(self, model, inputs, target_layers, alpha, beta, max_res_len=64
     
 
     attention_mask = inputs.get("attention_mask")
-    print("====")
-    print(attention_mask.shape)
-    print("====")
+    # print("====")
+    # print(attention_mask.shape)
+    # print("====")
 
     assert input_ids.shape[1] == 3
 

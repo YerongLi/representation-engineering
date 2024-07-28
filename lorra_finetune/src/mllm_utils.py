@@ -15,6 +15,7 @@ from torchvision.transforms.functional import InterpolationMode
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import (add_start_docstrings_to_model_forward,
                                 replace_return_docstrings)
+
 def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'):
     '''
     @image_nums is an input list that indicates the number of images associated with each text entry in the text_list. 
@@ -236,6 +237,38 @@ def custom_forward(self,
     """
 
     samples = kwargs.get('samples', None)
+    # print('  ======  ')
+    # print('samples', samples.keys())
+    # print('data_type:', samples['data_type'])
+    # Step 2: Print every entry of samples['text_input'][0] line by line
+    # print("     =================================\nEntries of the first list in 'text_input':", len(samples['text_input'][0]))
+    # # Entries of the first list in 'text_input': 4
+    # for i, entry in enumerate(samples['text_input'][0]):
+    #     print(i)
+    #     print(entry)
+    
+    # # Step 3: Print the first element of every sublist in samples['text_input']
+    # print("     =================================\nFirst element of each sublist in 'text_input':", len(samples['text_input']))
+    # # First element of each sublist in 'text_input': BATCH_SIZE
+    # for i, sublist in enumerate(samples['text_input']):
+    #     print(i)
+    #     print(sublist[0])
+    # print('image')
+    # print(len(samples['image']))
+    # image
+    # BATCH SIZE
+
+# image 8
+#   ======  
+# samples dict_keys(['text_input', 'data_type', 'image'])
+# data_type: ['multi', 'multi', 'multi', 'multi', 'multi', 'multi', 'multi', 'multi']
+# text_input 8
+# text_input ["[UNUSED_TOKEN_146]user\nCan you write a story from the given image?[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\nIn the heart of China's lush bamboo forests, a playful and curious panda named Pao lived a life of adventure and discovery. Unlike his fellow pandas, content with munching on bamboo, Pao's insatiable curiosity drove him to seek out new experiences and friendships.\nOne sunny morning, as Pao savored his breakfast of fresh bamboo shoots, he spotted a peculiar glimmer in the distance. His curiosity piqued, he set out to investigate. With his black and white fur blending seamlessly into the dappled sunlight, Pao waddled through the forest, following the glimmer's call.\nAs he approached the source, he discovered a crystal-clear stream, teeming with colorful fish that darted playfully beneath the surface. Entranced, Pao dipped his paw into the cool water, delighting in the sensation. He decided to follow the stream, eager to uncover its secrets.\nThe stream meandered through the forest, leading Pao to a hidden grove filled with vibrant flowers and towering trees. At the grove's center stood an ancient, majestic tree, its trunk so wide that several pandas holding hands couldn't encircle it. Pao felt a sense of awe and wonder as he gazed up at the tree's sprawling branches.\nSuddenly, a soft rustling sound broke the silence. Pao turned to see a group of animals emerging from the underbrush: rabbits, deer, birds, and even a mischievous red fox. They gathered around the ancient tree, and Pao realized that this was a special place where the forest's creatures came together in harmony.\nThe animals welcomed Pao warmly, and he learned that the ancient tree held the power to grant wishes to those with a pure heart. Encouraged by his new friends, Pao closed his eyes and made a wish: for the forest to remain a peaceful haven, where all creatures could live together in happiness.\nAs he made his wish, a gentle breeze rustled the leaves, and a sense of calm washed over him. From that day on, Pao became the guardian of the hidden grove, ensuring that the ancient tree remained a symbol of magic, wonder, and the beauty of nature. And so, the legend of Pao the panda and the ancient tree lived on, inspiring generations to cherish curiosity, friendship, and the natural world.[UNUSED_TOKEN_145]\n</s>", "[UNUSED_TOKEN_146]user\nCan you write a story from the given image?[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\nIn the heart of China's lush bamboo forests, a playful and curious panda named Pao lived a life of adventure and discovery. Unlike his fellow pandas, content with munching on bamboo, Pao's insatiable curiosity drove him to seek out new experiences and friendships.\nOne sunny morning, as Pao savored his breakfast of fresh bamboo shoots, he spotted a peculiar glimmer in the distance. His curiosity piqued, he set out to investigate. With his black and white fur blending seamlessly into the dappled sunlight, Pao waddled through the forest, following the glimmer's call.\nAs he approached the source, he discovered a crystal-clear stream, teeming with colorful fish that darted playfully beneath the surface. Entranced, Pao dipped his paw into the cool water, delighting in the sensation. He decided to follow the stream, eager to uncover its secrets.\nThe stream meandered through the forest, leading Pao to a hidden grove filled with vibrant flowers and towering trees. At the grove's center stood an ancient, majestic tree, its trunk so wide that several pandas holding hands couldn't encircle it. Pao felt a sense of awe and wonder as he gazed up at the tree's sprawling branches.\nSuddenly, a soft rustling sound broke the silence. Pao turned to see a group of animals emerging from the underbrush: rabbits, deer, birds, and even a mischievous red fox. They gathered around the ancient tree, and Pao realized that this was a special place where the forest's creatures came together in harmony.\nThe animals welcomed Pao warmly, and he learned that the ancient tree held the power to grant wishes to those with a pure heart. Encouraged by his new friends, Pao closed his eyes and made a wish: for the forest to remain a peaceful haven, where all creatures could live together in happiness.\nAs he made his wish, a gentle breeze rustled the leaves, and a sense of calm washed over him. From that day on, Pao became the guardian of the hidden grove, ensuring that the ancient tree remained a symbol of magic, wonder, and the beauty of nature. And so, the legend of Pao the panda and the ancient tree lived on, inspiring generations to cherish curiosity, friendship, and the natural world.[UNUSED_TOKEN_145]\n</s>", "[UNUSED_TOKEN_146]user\nCan you write a story from the given image?[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\nIn the heart of China's lush bamboo forests, a playful and curious panda named Pao lived a life of adventure and discovery. Unlike his fellow pandas, content with munching on bamboo, Pao's insatiable curiosity drove him to seek out new experiences and friendships.\nOne sunny morning, as Pao savored his breakfast of fresh bamboo shoots, he spotted a peculiar glimmer in the distance. His curiosity piqued, he set out to investigate. With his black and white fur blending seamlessly into the dappled sunlight, Pao waddled through the forest, following the glimmer's call.\nAs he approached the source, he discovered a crystal-clear stream, teeming with colorful fish that darted playfully beneath the surface. Entranced, Pao dipped his paw into the cool water, delighting in the sensation. He decided to follow the stream, eager to uncover its secrets.\nThe stream meandered through the forest, leading Pao to a hidden grove filled with vibrant flowers and towering trees. At the grove's center stood an ancient, majestic tree, its trunk so wide that several pandas holding hands couldn't encircle it. Pao felt a sense of awe and wonder as he gazed up at the tree's sprawling branches.\nSuddenly, a soft rustling sound broke the silence. Pao turned to see a group of animals emerging from the underbrush: rabbits, deer, birds, and even a mischievous red fox. They gathered around the ancient tree, and Pao realized that this was a special place where the forest's creatures came together in harmony.\nThe animals welcomed Pao warmly, and he learned that the ancient tree held the power to grant wishes to those with a pure heart. Encouraged by his new friends, Pao closed his eyes and made a wish: for the forest to remain a peaceful haven, where all creatures could live together in happiness.\nAs he made his wish, a gentle breeze rustled the leaves, and a sense of calm washed over him. From that day on, Pao became the guardian of the hidden grove, ensuring that the ancient tree remained a symbol of magic, wonder, and the beauty of nature. And so, the legend of Pao the panda and the ancient tree lived on, inspiring generations to cherish curiosity, friendship, and the natural world.[UNUSED_TOKEN_145]\n</s>", "[UNUSED_TOKEN_146]user\nCan you provide an extremely detailed description for this image?[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\nNo problem! The image features a close-up of a giant panda, a bear species native to China. The panda's face is prominently displayed, showing its distinctive black and white fur pattern. The fur on its face is primarily white, with large black patches around its eyes, which are characteristic of giant pandas. The eyes themselves are dark and expressive, giving the panda a gentle and somewhat curious expression.\nThe panda's ears are small, rounded, and covered in black fur, standing out against the white fur of its head. Its nose is black and moist, typical of bear species, and its mouth is slightly open, revealing its teeth and a bit of its pink tongue. The panda appears to be chewing on a piece of bamboo, which is partially visible in its mouth and held by its paw.\nThe background of the image is blurred, suggesting a shallow depth of field, which helps to keep the focus on the panda. The background colors are mostly green and brown, indicating that the panda is likely in a natural habitat, such as a forest or a bamboo grove.\nThe panda's fur looks thick and soft, with the black fur on its arms and legs contrasting sharply with the white fur on its body. The overall appearance of the panda is one of calmness and contentment, as it engages in its typical behavior of eating bamboo.\nI hope this is helpful  for you![UNUSED_TOKEN_145]\n</s>"]
+# image 8
+    # Assuming 'samples' is your dictionary
+
+    
+    samples = kwargs.get('samples', None)
     if samples:
         infer_mode = samples.get('infer_mode', 'base')
         if samples['data_type'][0] == 'text':
@@ -246,11 +279,13 @@ def custom_forward(self,
             raise NotImplementedError
 
         # encode text
-        text = samples['text_input']
+        # text = samples['text_input']
+        text = samples['neg_s']
+        # encode image
         # encode image
         if has_img:
             image = samples['image'][0]
-            bs = len(samples['text_input'][0])
+            bs = len(samples['orig_s'][0])
             image_nums = []
             temp_image = []
             for im in image:
@@ -262,9 +297,8 @@ def custom_forward(self,
                     temp_image.append(im)
             image = temp_image
             assert type(image) is list and len(image_nums) == bs
-            padding_side='left'
             to_regress_embeds, attention_mask, targets, im_mask = self.interleav_wrap(
-                image, text, image_nums, padding_side)
+                image, text, image_nums, 'left')
             # self.check_right_padding_with_embeddings(to_regress_embeds, attention_mask)
             # self.check_left_padding_with_embeddings(to_regress_embeds, attention_mask)
 

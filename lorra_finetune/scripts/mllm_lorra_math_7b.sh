@@ -2,11 +2,10 @@
 
 # source /opt/rh/devtoolset-10/enable
 
-# ds_master_port=$((29000 + RANDOM % 1000))
-ds_master_port=$((29000 + $(date +%N) % 1000))
+ds_master_port=$((29000 + RANDOM % 1000))
 export DATA="data.txt"
 cd ..
-CUDA_VISIBLE_DEVICES=2,3 deepspeed --num_gpus 2 --master_port $ds_master_port src/mllm_lorra.py \
+CUDA_VISIBLE_DEVICES=1 deepspeed --master_port $ds_master_port src/mllm_lorra.py \
     --model_name_or_path  "/home/yerong2/models/internlm-xcomposer2d5-7b" \
     --data_path $DATA \
     --given_num True \
@@ -16,9 +15,10 @@ CUDA_VISIBLE_DEVICES=2,3 deepspeed --num_gpus 2 --master_port $ds_master_port sr
     --use_lora True \
     --hd_num 18 \
     --num_train_epochs 30 \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 8 \
+    --per_device_train_batch_size 11 \
+    --per_device_eval_batch_size 5 \
+    --batch_size 5 \
+    --gradient_accumulation_steps 7 \
     --evaluation_strategy "no" \
     --save_strategy "epoch" \
     --save_total_limit 1 \
@@ -29,7 +29,7 @@ CUDA_VISIBLE_DEVICES=2,3 deepspeed --num_gpus 2 --master_port $ds_master_port sr
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 2048 \
+    --max_length 3072 \
     --gradient_checkpointing True \
     --user_tag '[INST]' \
     --assistant_tag '[/INST]' \

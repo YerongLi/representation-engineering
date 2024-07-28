@@ -21,6 +21,18 @@ max_res_len = 64
 
 def get_truncated_outputs(all_outputs, prefixes, num_examples, user_tag, assistant_tag, pos_type, neg_type, control_template):
     orig_s, pos_s, neg_s = [], [], []
+    # print("==== Before prefixes ====")
+    # print(prefixes[:3])
+    # print(len(prefixes))
+    # print("==== After ====")
+    # ==== Before prefixes ====
+    # ['Give three tips for staying healthy.', 'What are the three primary colors?', 'Describe the structure of an atom.']
+    # 31323
+    # ==== After ====
+    # ==== Before prefixes ====
+    # ['Give three tips for staying healthy.', 'What are the three primary colors?', 'Describe the structure of an atom.']
+    # 31323
+    # ==== After ====
     for s, p in zip(all_outputs, prefixes):
         orig_s.append(orig_template.format(
             user_tag=user_tag, assistant_tag=assistant_tag,
