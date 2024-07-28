@@ -280,7 +280,22 @@ def custom_forward(self,
 
         # encode text
         # text = samples['text_input']
-        text = samples['neg_s']
+        orig_s = samples['orig_s']
+        pos_s = samples['pos_s']
+        neg_s = samples['neg_s']
+
+        def print_comparison(index):
+            print(f"Index {index}:")
+            for i in range(3):
+                print(f"neg_s[{index}][{i}]: {samples['neg_s'][index][i]}")
+                print(f"pos_s[{index}][{i}]: {samples['pos_s'][index][i]}")
+                print(f"orig_s[{index}][{i}]: {samples['orig_s'][index][i]}")
+                print("-----")
+            print("=====")
+        
+        # Print comparisons for indices 0 and 1
+        print_comparison(0)
+        print_comparison(1)
         # encode image
         # encode image
         if has_img:
