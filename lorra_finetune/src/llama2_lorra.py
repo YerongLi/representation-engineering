@@ -42,7 +42,7 @@ from args import (
 def compute_loss(self, model, inputs, target_layers, alpha, beta, max_res_len=64, return_outputs=False, **kwargs):
     
     input_ids = inputs.get("input_ids")
-    # print('input_ids.shape', input_ids.shape)
+    print('input_ids.shape *****', input_ids.shape)
     # input_ids.shape torch.Size([4, 3, 320])
     # --per_device_train_batch_size 4 \
     

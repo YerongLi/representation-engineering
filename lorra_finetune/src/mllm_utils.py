@@ -16,7 +16,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import (add_start_docstrings_to_model_forward,
                                 replace_return_docstrings)
 
-def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'):
+def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right', set_length=None):
     '''
     @image_nums is an input list that indicates the number of images associated with each text entry in the text_list. 
     This list helps the function understand how many images correspond to each piece of text and manage the interleaving of images and text accordingly.
@@ -65,7 +65,7 @@ def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'
                 if need_bos:
                     need_bos = False
                 wrap_tokens.append(part_tokens.input_ids)
-                part_embeds = self.model.tok_embeddings(part_tokens.input_ids)
+                part_embeds = self.model.model.tok_embeddings(part_tokens.input_ids)
                 wrap_embeds.append(part_embeds)
                 wrap_im_mask.append(torch.zeros(part_embeds.shape[:2]).to(self.device))
                 temp_len += part_embeds.shape[1]
@@ -90,11 +90,17 @@ def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'
     temp_max_len = np.max([i.shape[1] for i in temp_embeds])
     # Max length
     temp_max_len = min(temp_max_len, self.max_length)
+    
 
+    if set_length is not None:
+        if set_length < temp_max_len:
+            print(f"Warning: set_length is too small. set_length: {set_length}, temp_max_len: {temp_max_len}")
+        temp_max_len = set_length
+        
     final_input, final_atts, final_tars, final_mask = [], [], [], []
     pad = torch.ones([1, 1]) * self.tokenizer.pad_token_id
     pad = pad.long().to(self.device)
-    pad_emb = self.model.tok_embeddings(pad)
+    pad_emb = self.model.model.tok_embeddings(pad)
     for idx in range(len(temp_embeds)):
         temp_len = temp_embeds[idx].shape[1]
         if temp_len >= temp_max_len:
@@ -284,23 +290,42 @@ def custom_forward(self,
         pos_s = samples['pos_s']
         neg_s = samples['neg_s']
 
-        def print_comparison(index):
-            print(f"Index {index}:")
-            for i in range(3):
-                print(f"neg_s[{index}][{i}]: {samples['neg_s'][index][i]}")
-                print(f"pos_s[{index}][{i}]: {samples['pos_s'][index][i]}")
-                print(f"orig_s[{index}][{i}]: {samples['orig_s'][index][i]}")
-                print("-----")
-            print("=====")
+        # def print_comparison(index):
+        #     print(f"Index {index}:")
+        #     for i in range(3):
+        #         print(f"neg_s[{index}][{i}]: {samples['neg_s'][index][i]}")
+        #         print(f"pos_s[{index}][{i}]: {samples['pos_s'][index][i]}")
+        #         print(f"orig_s[{index}][{i}]: {samples['orig_s'][index][i]}")
+        #         print("-----")
+        #     print("=====")
         
-        # Print comparisons for indices 0 and 1
-        print_comparison(0)
-        print_comparison(1)
-        # encode image
+        # # Print comparisons for indices 0 and 1
+        # print_comparison(0)
+        # print_comparison(1)
+
+        # print('shapes ===  ')
+        # print(len(text))
+        # print(len(text[0]))
+        # print(len(text[0][0]))
+        # shapes ===  
+        # 11
+        # 5
+        # 1500
+        # shapes ===  
+        # 11
+        # 5
+        # 2330
+        # shapes ===  
+        # 11
+        # 5
+        # --per_device_train_batch_size 11 \
+        # --per_device_eval_batch_size 5 \
+        # --batch_size 5 \
         # encode image
         if has_img:
             image = samples['image'][0]
             bs = len(samples['orig_s'][0])
+            assert len(samples['orig_s']) == 1, 'self.per_device_train_batch_size'
             image_nums = []
             temp_image = []
             for im in image:
@@ -311,9 +336,104 @@ def custom_forward(self,
                     image_nums.append(1)
                     temp_image.append(im)
             image = temp_image
-            assert type(image) is list and len(image_nums) == bs
-            to_regress_embeds, attention_mask, targets, im_mask = self.interleav_wrap(
-                image, text, image_nums, 'left')
+            # assert type(image) is list and len(image_nums) == bs
+            # to_regress_embeds, attention_mask, targets, im_mask = self.interleav_wrap(
+            #         image, orig_s, image_nums)
+            # print('len(image)   =====')
+
+            # print(len(image))
+            # assert False, 'PASS'
+            # Initialize the lists to store the outputs
+            print(' Shape Comparison ===== ')
+            q_to_regress_embeds = [None, None, None]
+            q_attention_mask = [None, None, None]
+            q_targets = [None, None, None]
+            q_im_mask = [None, None, None]
+            
+
+            
+            # Loop through the input strings and store the outputs
+            for i, input_str in enumerate([orig_s, pos_s, neg_s]):
+                # print(input_str)
+                # assert bs == len(input_str[0]), print(len(input_str[0]))
+                q_to_regress_embeds[i], q_attention_mask[i], q_targets[i], q_im_mask[i] = self.interleav_wrap(
+                    image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], image_nums, 'right', set_length=self.query_max_len
+                )
+
+            # Initialize the lists to store the outputs
+            r_to_regress_embeds = [None, None, None]
+            r_attention_mask = [None, None, None]
+            r_targets = [None, None, None]
+            r_im_mask = [None, None, None]
+            # Loop through the input strings and store the outputs
+            for i, input_str in enumerate([orig_s, pos_s, neg_s]):
+                if i == 0:
+                    r_to_regress_embeds[0], r_attention_mask[0], r_targets[0], r_im_mask[0] = self.interleav_wrap(
+                        image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], image_nums, 'left', set_length=self.response_max_len
+                    )
+                else:
+                    r_to_regress_embeds[i] = r_to_regress_embeds[0]
+                    r_attention_mask[i] = r_attention_mask[0]
+                    r_targets[i] = r_targets[0]
+                    r_im_mask[i] = r_im_mask[0]
+
+
+            # Assuming that q_to_regress_embeds and r_to_regress_embeds have been populated as per the previous logic
+            
+            to_regress_embeds = [
+                torch.cat((q_to_regress_embeds[i], r_to_regress_embeds[i]), dim=1)
+                for i in range(3)
+            ]
+            
+            
+            # Concatenate q_attention_mask and r_attention_mask
+            to_attention_mask = [
+                torch.cat((q_attention_mask[i], r_attention_mask[i]), dim=1)
+                for i in range(3)
+            ]
+            
+
+            # Concatenate q_targets and r_targets
+            to_targets = [
+                torch.cat((q_targets[i], r_targets[i]), dim=1)
+                for i in range(3)
+            ]
+
+
+            # Concatenate q_im_mask and r_im_mask
+            to_im_mask = [
+                torch.cat((q_im_mask[i], r_im_mask[i]), dim=1)
+                for i in range(3)
+            ]
+            
+
+# ==== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+# torch.Size([3, 1166, 4096])
+# /home/yerong2/local/miniconda3/envs/mllm/lib/python3.11/site-packages/deepspeed/runtime/zero/stage_1_and_2.py:1652: UserWarning: The torch.cuda.*DtypeTensor constructors are no longer recommended. It's best to use methods such as torch.tensor(data, dtype=*, device='cuda') to create tensors. (Triggered internally at ../torch/csrc/tensor/python_tensor.cpp:78.)
+#   total_norm_cuda = get_accelerator().FloatTensor([float(total_norm)])
+# {'loss': 8.8183, 'learning_rate': 0.0003, 'epoch': 0.37}                                                                                          
+#   2%|█▊                                                                                                            | 1/60 [00:16<15:46, 16.04s/it]===== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+# torch.Size([3, 1362, 4096])
+# ===== to_regress_embeds shape =====
+    #         o_to_regress_embeds, o_attention_mask, o_targets, o_im_mask = self.interleav_wrap(
+    # images_batch, orig_s.split(assistant_tag)[0], len(images_batch), padding='left', set_length=256)
+    #         p_to_regress_embeds, p_attention_mask, p_targets, p_im_mask = self.interleav_wrap(
+    # images_batch, pos_s.split(assistant_tag)[0], len(images_batch), padding='left', set_length=256)
+    #         n_to_regress_embeds, n_attention_mask, n_targets, n_im_mask = self.interleav_wrap(
+    # images_batch, neg_s.split(assistant_tag)[0], len(images_batch), padding='left', set_length=256)
+            
             # self.check_right_padding_with_embeddings(to_regress_embeds, attention_mask)
             # self.check_left_padding_with_embeddings(to_regress_embeds, attention_mask)
 
@@ -325,8 +445,8 @@ def custom_forward(self,
             attention_mask = to_regress_tokens.attention_mask
             im_mask = torch.zeros(to_regress_embeds.shape[:2]).cuda()
 
-        inputs_embeds = to_regress_embeds[:, :self.max_length]
-        attention_mask = attention_mask[:, :self.max_length]
+        inputs_embeds = to_regress_embeds[:, :]
+        attention_mask = attention_mask[:, :]
         targets = targets[:, :self.max_length]
         im_mask = im_mask[:, :self.max_length].bool()
         labels = targets

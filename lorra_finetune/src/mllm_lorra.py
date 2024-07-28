@@ -199,68 +199,12 @@ def make_supervised_data_module(
         data_collator=data_collator,
     )
 
-# def compute_loss(self, model, inputs, target_layers, alpha, beta, max_res_len=64, return_outputs=False, **kwargs):
-
-#     input_ids = inputs.get("input_ids")
-#     attention_mask = inputs.get("attention_mask")
-
-#     assert input_ids.shape[1] == 3
-
-#     orig_input_ids = input_ids[:, 0]
-#     pos_input_ids = input_ids[:, 1]
-#     neg_input_ids = input_ids[:, 2]
-
-#     orig_attention_mask = attention_mask[:, 0]
-#     pos_attention_mask = attention_mask[:, 1]
-#     neg_attention_mask = attention_mask[:, 2]
-
-#     min_length = max_res_len
-#     response_attention_mask = orig_attention_mask[:, -min_length:].repeat(len(target_layers), 1, 1).unsqueeze(-1)
-
-#     module = 'past_key_values' # 'hidden_states
-#     with model.disable_adapter():
-#         model.eval()
-#         with torch.no_grad():
-#             orig_outputs = model(
-#                 input_ids=orig_input_ids,
-#                 attention_mask=orig_attention_mask,
-#                 output_hidden_states=True
-#             )['hidden_states']
-#             orig_hidden = [orig_outputs[l][:, -min_length:].detach() for l in target_layers]
-#             pos_outputs = model(
-#                 input_ids=pos_input_ids,
-#                 attention_mask=pos_attention_mask,
-#                 output_hidden_states=True
-#             )['hidden_states']
-#             neg_outputs = model(
-#                 input_ids=neg_input_ids,
-#                 attention_mask=neg_attention_mask,
-#                 output_hidden_states=True
-#             )['hidden_states']
-#             direction_hidden = [pos_outputs[l][:, -min_length:].detach() - \
-#                                 neg_outputs[l][:, -min_length:].detach() \
-#                                 # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
-#                                                 for l in target_layers]
-#             target_hidden = torch.stack([orig_hidden[i] + alpha * direction_hidden[i] for i in range(len(target_layers))]) * response_attention_mask
-
-#             del orig_outputs, pos_outputs, neg_outputs, orig_hidden, direction_hidden
-#             gc.collect()
-#             torch.cuda.empty_cache()
-
-#     model.train()
-#     lora_outputs = model(
-#         input_ids=orig_input_ids,
-#         attention_mask=orig_attention_mask,
-#         output_hidden_states=True
-#     )['hidden_states']
-#     lora_hidden = torch.stack([lora_outputs[l][:, -min_length:] for l in target_layers]) * response_attention_mask
-
-#     loss_fct = torch.nn.MSELoss()
-#     loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
-#     return (loss, lora_hidden) if return_outputs else loss
 
 class RETrainer(Trainer):
-
+    def __init__(self, *args, lorra_args=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.assistant_tag = lorra_args.assistant_tag
+        self.target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
     def compute_loss(self, model, inputs, return_outputs=False):
         """
         # Original compute_loss functions
@@ -268,67 +212,171 @@ class RETrainer(Trainer):
 
         Subclass and override for custom behavior.
         """
-        if self.label_smoother is not None and "labels" in inputs:
-            labels = inputs.pop("labels")
-        else:
-            labels = None
-        # print('DEBUG \n\n inputs:')
-        # print(inputs)
-# DEBUG 
+        samples = inputs.get('samples', None)
+        if samples:
+            infer_mode = samples.get('infer_mode', 'base')
+            if samples['data_type'][0] == 'text':
+                has_img = False
+            elif samples['data_type'][0] == 'multi':
+                has_img = True
+            else:
+                raise NotImplementedError
+    
+            orig_s = samples['orig_s']
+            pos_s = samples['pos_s']
+            neg_s = samples['neg_s']
 
-#  inputs:
-# {'samples': {'text_input': [["[UNUSED_TOKEN_146]user\nCan you provide an extremely detailed description for this image?[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\nNo problem! The image features a close-up of a giant panda, a bear species native to China. The panda's face is prominently displayed, showing its distinctive black and white fur pattern. The fur on its face is primarily white, with large black patches around its eyes, which are characteristic of giant pandas. The eyes themselves are dark and expressive, giving the panda a gentle and somewhat curious expression.\nThe panda's ears are small, rounded, and covered in black fur, standing out against the white fur of its head. Its nose is black and moist, typical of bear species, and its mouth is slightly open, revealing its teeth and a bit of its pink tongue. The panda appears to be chewing on a piece of bamboo, which is partially visible in its mouth and held by its paw.\nThe background of the image is blurred, suggesting a shallow depth of field, which helps to keep the focus on the panda. The background colors are mostly green and brown, indicating that the panda is likely in a natural habitat, such as a forest or a bamboo grove.\nThe panda's fur looks thick and soft, with the black fur on its arms and legs contrasting sharply with the white fur on its body. The overall appearance of the panda is one of calmness and contentment, as it engages in its typical behavior of eating bamboo.\nI hope this is helpful  for you![UNUSED_TOKEN_145]\n</s>"]], 'data_type': ['multi'], 'image': [[[tensor([[[[1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
-#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
-#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
-#           ...,
-#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
-#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297],
-#           [1.9297, 1.9297, 1.9297,  ..., 1.9297, 1.9297, 1.9297]],
+            if has_img:
+                image = samples['image'][0]
+                bs = len(samples['orig_s'][0])
+                # assert len(samples['orig_s']) == 1, 'self.per_device_train_batch_size'
+                image_nums = []
+                temp_image = []
+                for im in image:
+                    if type(im) is list:
+                        image_nums.append(len(im))
+                        temp_image.extend(im)
+                    else:
+                        image_nums.append(1)
+                        temp_image.append(im)
+                image = temp_image
 
-#          [[2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
-#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
-#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
-#           ...,
-#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
-#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781],
-#           [2.0781, 2.0781, 2.0781,  ..., 2.0781, 2.0781, 2.0781]],
+                q_to_regress_embeds = [None, None, None]
+                q_attention_mask = [None, None, None]
+                q_targets = [None, None, None]
+                q_im_mask = [None, None, None]
+                
+    
+                
+                for i, input_str in enumerate([orig_s, pos_s, neg_s]):
+                    q_to_regress_embeds[i], q_attention_mask[i], q_targets[i], q_im_mask[i] = model.interleav_wrap(
+                        image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], image_nums, 'right', set_length=model.query_max_len
+                    )
+    
+                # Initialize the lists to store the outputs
+                r_to_regress_embeds = [None, None, None]
+                r_attention_mask = [None, None, None]
+                r_targets = [None, None, None]
+                r_im_mask = [None, None, None]
+                # Loop through the input strings and store the outputs
+                for i, input_str in enumerate([orig_s, pos_s, neg_s]):
+                    if i == 0:
+                        r_to_regress_embeds[0], r_attention_mask[0], r_targets[0], r_im_mask[0] = model.interleav_wrap(
+                            image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], image_nums, 'left', set_length=model.response_max_len
+                        )
+                    else:
+                        r_to_regress_embeds[i] = r_to_regress_embeds[0]
+                        r_attention_mask[i] = r_attention_mask[0]
+                        r_targets[i] = r_targets[0]
+                        r_im_mask[i] = r_im_mask[0]
+    
+    
+                # Assuming that q_to_regress_embeds and r_to_regress_embeds have been populated as per the previous logic
+                
+                to_regress_embeds = [
+                    torch.cat((q_to_regress_embeds[i], r_to_regress_embeds[i]), dim=1)
+                    for i in range(3)
+                ]
+                
+                
+                # Concatenate q_attention_mask and r_attention_mask
+                to_attention_mask = [
+                    torch.cat((q_attention_mask[i], r_attention_mask[i]), dim=1)
+                    for i in range(3)
+                ]
+                
+    
+                # Concatenate q_targets and r_targets
+                # to_targets = [
+                #     torch.cat((q_targets[i], r_targets[i]), dim=1)
+                #     for i in range(3)
+                # ]
+    
+    
+                # Concatenate q_im_mask and r_im_mask
+                to_im_mask = [
+                    torch.cat((q_im_mask[i], r_im_mask[i]), dim=1).bool()
+                    for i in range(3)
+                ]
+                module = 'past_key_values' # 'hidden_states
+                alpha = 16
+                with model.disable_adapter():
+                    model.eval()
+                    with torch.no_grad():
+                        # outputs = self.model(
+                        #     input_ids=input_ids,
+                        #     attention_mask=attention_mask,
+                        #     position_ids=position_ids,
+                        #     past_key_values=past_key_values,
+                        #     inputs_embeds=inputs_embeds,
+                        #     use_cache=use_cache,
+                        #     output_attentions=output_attentions,
+                        #     output_hidden_states=output_hidden_states,
+                        #     return_dict=return_dict,
+                        #     im_mask=im_mask,
+                        #     infer_mode=infer_mode,
+                        # )
+                        min_length = 1024
+                        response_attention_mask = to_attention_mask[0][:, -min_length:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
+                        # print(' === to_regress_embeds[0] =====')
+                        # print(to_regress_embeds[0].shape)
+                        # print(to_regress_embeds[1].shape)
+                        # print(to_regress_embeds[2].shape)
+                        orig_outputs = model(
+                            input_ids=None,
+                            attention_mask=to_attention_mask[0],
+                            inputs_embeds=to_regress_embeds[0],
+                            im_mask=to_im_mask[0],
+                            output_hidden_states=True,
+                            infer_mode=infer_mode,
+                        )['hidden_states']
+    
+                        orig_hidden = [orig_outputs[l][:, -min_length:].detach() for l in self.target_layers]
+                        # Generate positive outputs
+                        pos_outputs = model(
+                            input_ids=None,
+                            attention_mask=to_attention_mask[1],
+                            inputs_embeds=to_regress_embeds[1],
+                            im_mask=to_im_mask[1],
+                            output_hidden_states=True,
+                            infer_mode=infer_mode,
+                        )['hidden_states']
+                        
+                        
+                        # Generate negative outputs
+                        neg_outputs = model(
+                            input_ids=None,
+                            attention_mask=to_attention_mask[2],
+                            inputs_embeds=to_regress_embeds[2],
+                            im_mask=to_im_mask[2],
+                            output_hidden_states=True,
+                            infer_mode=infer_mode,
+                        )['hidden_states']
+                        direction_hidden = [pos_outputs[l][:, -min_length:].detach() - \
+                                            neg_outputs[l][:, -min_length:].detach() \
+                                            # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
+                                                            for l in self.target_layers]
+                        target_hidden = torch.stack([orig_hidden[i] + alpha * direction_hidden[i] for i in range(len(self.target_layers))]) * response_attention_mask
+            
+                        del orig_outputs, pos_outputs, neg_outputs, orig_hidden, direction_hidden
+                        gc.collect()
+                        torch.cuda.empty_cache()
 
-#          [[2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
-#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
-#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
-#           ...,
-#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
-#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406],
-#           [2.1406, 2.1406, 2.1406,  ..., 2.1406, 2.1406, 2.1406]]]],
-#        device='cuda:0', dtype=torch.bfloat16)]]]}}
-        # print('DEBUG \n\n inputs:', len(inputs['samples']['text_input']), len(inputs['samples']['text_input'][0]))
+        model.train()
+        lora_outputs = model(
+            input_ids=None,
+            attention_mask=to_attention_mask[0],
+            inputs_embeds=to_regress_embeds[0],
+            im_mask=to_im_mask[0],
+            output_hidden_states=True,
+            infer_mode=infer_mode,
+        )['hidden_states']
+        lora_hidden = torch.stack([lora_outputs[l][:, -min_length:] for l in self.target_layers]) * response_attention_mask
+    
+        loss_fct = torch.nn.MSELoss()
+        loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
+        return (loss, lora_hidden) if return_outputs else loss
         
-        outputs = model(**inputs)
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
-
-        if labels is not None:
-            if is_peft_available() and isinstance(model, PeftModel):
-                model_name = unwrap_model(model.base_model)._get_name()
-            else:
-                model_name = unwrap_model(model)._get_name()
-            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True)
-            else:
-                loss = self.label_smoother(outputs, labels)
-        else:
-            if isinstance(outputs, dict) and "loss" not in outputs:
-                raise ValueError(
-                    "The model did not return a loss from the inputs, only the following keys: "
-                    f"{','.join(outputs.keys())}. For reference, the inputs it received are {','.join(inputs.keys())}."
-                )
-            # We don't use .loss here since the model may return tuples instead of ModelOutput.
-            loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
-
-        return (loss, outputs) if return_outputs else loss
-
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
         assert param.ds_status == ZeroParamStatus.NOT_AVAILABLE
@@ -417,11 +465,14 @@ def train():
     )
 
 
-    model.tokenizer = tokenizer
-    model.interleav_wrap = partial(custom_interleav_wrap, model)
-    model.forward = partial(custom_forward, model)
-    model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
-    model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
+    # model.tokenizer = tokenizer
+    # # model.interleav_wrap = partial(custom_interleav_wrap, model)
+    # # model.assistant_tag = lorra_args.assistant_tag
+    # # model.query_max_len = 1536
+    # # model.response_max_len = 2000
+    # # model.forward = partial(custom_forward, model)
+    # model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
+    # model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
 
     if training_args.fix_vit:
         model.vit.requires_grad_(False)
@@ -438,12 +489,15 @@ def train():
     if model_args.use_lora:
         for name, param in model.model.named_parameters():
             param.requires_grad = False
+        lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
+        lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
+            layers_to_transform=lora_layers_to_transform,
             task_type='CAUSAL_LM',
         )
 
@@ -452,11 +506,26 @@ def train():
 
         if training_args.gradient_checkpointing:
             model.enable_input_require_grads()
+    model.tokenizer = tokenizer
+    model.interleav_wrap = partial(custom_interleav_wrap, model)
+    # model.assistant_tag = lorra_args.assistant_tag
+    model.query_max_len = 1536
+    model.response_max_len = 2000
+    model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
+    model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
 
+
+
+    lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
     # Start trainner
     trainer = RETrainer(
-        model=model, tokenizer=tokenizer, args=training_args, **data_module)
-
+        model=model, tokenizer=tokenizer, args=training_args, lorra_args=lorra_args,**data_module)
+    # trainer.interleav_wrap = partial(custom_interleav_wrap, trainer)
+    # trainer.assistant_tag = lorra_args.assistant_tag
+    # trainer.max_length = 4096
+    
+    # trainer.query_max_len = 1536
+    # trainer.response_max_len = 2000
     trainer.train()
     trainer.save_state()
     import time

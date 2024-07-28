@@ -129,6 +129,16 @@ class AlpacaSupervisedDataset(Dataset):
         )
         combined_input_ids = torch.cat([tokenized_inputs["input_ids"], response_tokenized_inputs["input_ids"]], dim=1)
         combined_attention_mask = torch.cat([tokenized_inputs["attention_mask"], response_tokenized_inputs["attention_mask"]], dim=1)
+        print("===== tokenized_inputs shape =====")
+        print(tokenized_inputs["input_ids"].shape)
+        print(tokenized_inputs["attention_mask"].shape)
+        
+        print("===== combined_input_ids shape =====")
+        print(combined_input_ids.shape)
+        
+        print("===== combined_attention_mask shape =====")
+        print(combined_attention_mask.shape)
+
         return dict(
             input_ids=combined_input_ids,
             attention_mask=combined_attention_mask
