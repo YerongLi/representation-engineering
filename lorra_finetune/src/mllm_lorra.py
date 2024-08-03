@@ -50,6 +50,19 @@ from mllm_utils import custom_forward
 from mllm_utils import check_right_padding_with_embeddings
 from mllm_utils import check_left_padding_with_embeddings
 @dataclass
+class LorraArguments:
+    user_tag: str = field(metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
+    assistant_tag: str = field(metadata={"help": "Assistant tag for chat models (eg: `ASSISTANT:` or `[\INST]`)"})
+    pos_type: str = field(metadata={"help": "Concept/Function to be optimized towards (eg: 'a truthful')"})
+    neg_type: str = field(metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"})
+    target_layers: str = field(metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
+    control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
+    lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    max_res_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+
+
+@dataclass
 class TrainingArguments(TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
     optim: str = field(default='adamw_torch')
@@ -385,7 +398,9 @@ def maybe_zero_3(param):
     else:
         param = param.detach().cpu().clone()
     return param
-
+    def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
+        print(f"Query Max Length: {self.lorra_args.query_max_len}")
+        print(f"Response Max Length: {self.lorra_args.response_max_len}")
 
 # Borrowed from peft.utils.get_peft_model_state_dict
 def get_peft_state_maybe_zero_3(named_params, bias):
@@ -520,12 +535,7 @@ def train():
     # Start trainner
     trainer = RETrainer(
         model=model, tokenizer=tokenizer, args=training_args, lorra_args=lorra_args,**data_module)
-    # trainer.interleav_wrap = partial(custom_interleav_wrap, trainer)
-    # trainer.assistant_tag = lorra_args.assistant_tag
-    # trainer.max_length = 4096
-    
-    # trainer.query_max_len = 1536
-    # trainer.response_max_len = 2000
+
     trainer.train()
     trainer.save_state()
     import time
