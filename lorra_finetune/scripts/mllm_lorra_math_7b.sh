@@ -47,7 +47,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --overwrite_output_dir \
     --do_eval \
     --eval_steps 10  \
-    --learning_rate 3e-4 \
+    --learning_rate 6e-4 \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
