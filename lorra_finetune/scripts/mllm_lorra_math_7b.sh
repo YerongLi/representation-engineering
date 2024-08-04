@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --batch_size 3 \
     --gradient_accumulation_steps 7 \
     --evaluation_strategy "steps" \
-    --eval_steps 20  \
+    --eval_steps 10  \
     --save_strategy "steps" \
     --save_steps 50 \
     --save_total_limit 1 \
@@ -49,7 +49,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --output_dir ./mllm_lorra \
     --overwrite_output_dir \
     --do_eval \
-    --learning_rate 1.2e-3 \
+    --learning_rate 2.4e-3 \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
