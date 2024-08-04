@@ -49,7 +49,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --output_dir ./mllm_lorra \
     --overwrite_output_dir \
     --do_eval \
-    --learning_rate 2.4e-3 \
+    --learning_rate 1.5e-3 \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
@@ -57,6 +57,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --q_lora False \
     --deepspeed configs/ds_config_zero2.json \
     --report_to none
+# --learning_rate 2.4e-3 \
 
 
 # "/data/private_models/cais_models/llama-2/llama/llama-2-13b-chat-hf/"
