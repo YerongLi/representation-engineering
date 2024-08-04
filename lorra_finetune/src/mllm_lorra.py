@@ -331,7 +331,7 @@ class RETrainer(Trainer):
                         #     im_mask=im_mask,
                         #     infer_mode=infer_mode,
                         # )
-                        self.min_length = 1024
+                        self.min_length = self.lorra_args.response_max_len
                         response_attention_mask = to_attention_mask[0][:, -self.min_length:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
                         # print(' === to_regress_embeds[0] =====')
                         # print(to_regress_embeds[0].shape)
