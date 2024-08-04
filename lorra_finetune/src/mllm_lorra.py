@@ -59,7 +59,8 @@ class LorraArguments:
     control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
     lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
     lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
-    max_res_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    response_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
 
 
 @dataclass
@@ -218,6 +219,7 @@ class RETrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.assistant_tag = lorra_args.assistant_tag
         self.target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
+        self.lorra_args = lorra_args
     def compute_loss(self, model, inputs, return_outputs=False):
         """
         # Original compute_loss functions
@@ -329,8 +331,8 @@ class RETrainer(Trainer):
                         #     im_mask=im_mask,
                         #     infer_mode=infer_mode,
                         # )
-                        min_length = 1024
-                        response_attention_mask = to_attention_mask[0][:, -min_length:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
+                        self.min_length = 1024
+                        response_attention_mask = to_attention_mask[0][:, -self.min_length:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
                         # print(' === to_regress_embeds[0] =====')
                         # print(to_regress_embeds[0].shape)
                         # print(to_regress_embeds[1].shape)
@@ -344,7 +346,7 @@ class RETrainer(Trainer):
                             infer_mode=infer_mode,
                         )['hidden_states']
     
-                        orig_hidden = [orig_outputs[l][:, -min_length:].detach() for l in self.target_layers]
+                        orig_hidden = [orig_outputs[l][:, -self.min_length:].detach() for l in self.target_layers]
                         # Generate positive outputs
                         pos_outputs = model(
                             input_ids=None,
@@ -365,8 +367,8 @@ class RETrainer(Trainer):
                             output_hidden_states=True,
                             infer_mode=infer_mode,
                         )['hidden_states']
-                        direction_hidden = [pos_outputs[l][:, -min_length:].detach() - \
-                                            neg_outputs[l][:, -min_length:].detach() \
+                        direction_hidden = [pos_outputs[l][:, -self.min_length:].detach() - \
+                                            neg_outputs[l][:, -self.min_length:].detach() \
                                             # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
                                                             for l in self.target_layers]
                         target_hidden = torch.stack([orig_hidden[i] + alpha * direction_hidden[i] for i in range(len(self.target_layers))]) * response_attention_mask
@@ -384,12 +386,17 @@ class RETrainer(Trainer):
             output_hidden_states=True,
             infer_mode=infer_mode,
         )['hidden_states']
-        lora_hidden = torch.stack([lora_outputs[l][:, -min_length:] for l in self.target_layers]) * response_attention_mask
+        lora_hidden = torch.stack([lora_outputs[l][:, -self.min_length:] for l in self.target_layers]) * response_attention_mask
     
         loss_fct = torch.nn.MSELoss()
         loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
         return (loss, lora_hidden) if return_outputs else loss
         
+    def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
+        print(f"Query Max Length: {self.lorra_args.query_max_len}")
+        print(f"Response Max Length: {self.lorra_args.response_max_len}")
+        print(f"Response MIN Length: {self.min_length}")
+
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
         assert param.ds_status == ZeroParamStatus.NOT_AVAILABLE

@@ -288,6 +288,6 @@ class AlpacaSupervisedDataset(Mix_dataset):
                                                             lorra_args.control_template)
                 # del ds.raw_data
             
-        self.max_res_len = lorra_args.max_res_len
+        # self.max_res_len = lorra_args.max_res_len
 
         self.tokenizer = tokenizer

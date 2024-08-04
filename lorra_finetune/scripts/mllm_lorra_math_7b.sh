@@ -39,6 +39,8 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --neg_type 'an untruthful' \
     --control_template "Give {type} answer." \
     --target_layers "10,12,14,16,18,20" \
+    --query_max_len 1536 \
+    --response_max_len 2000 \
     --lorra_alpha 5 \
     --lorra_beta 0 \
     --lora_r 8 \
