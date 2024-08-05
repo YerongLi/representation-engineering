@@ -265,7 +265,7 @@ class RETrainer(Trainer):
                 
                 for i, input_str in enumerate([orig_s, pos_s, neg_s]):
                     q_to_regress_embeds[i], q_attention_mask[i], q_targets[i], q_im_mask[i] = model.interleav_wrap(
-                        image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], image_nums, 'right', set_length=model.query_max_len
+                        image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], image_nums, 'right', set_length=self.lorra_args.query_max_len
                     )
     
                 # Initialize the lists to store the outputs
@@ -277,7 +277,7 @@ class RETrainer(Trainer):
                 for i, input_str in enumerate([orig_s, pos_s, neg_s]):
                     if i == 0:
                         r_to_regress_embeds[0], r_attention_mask[0], r_targets[0], r_im_mask[0] = model.interleav_wrap(
-                            image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], image_nums, 'left', set_length=model.response_max_len
+                            image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], image_nums, 'left', set_length=self.lorra_args.response_max_len
                         )
                     else:
                         r_to_regress_embeds[i] = r_to_regress_embeds[0]
@@ -531,8 +531,8 @@ def train():
     model.tokenizer = tokenizer
     model.interleav_wrap = partial(custom_interleav_wrap, model)
     # model.assistant_tag = lorra_args.assistant_tag
-    model.query_max_len = 1536
-    model.response_max_len = 2000
+    # model.query_max_len = 1536
+    # model.response_max_len = 2000
     model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
     model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
 

@@ -3,7 +3,7 @@
 # source /opt/rh/devtoolset-10/enable
 
 ds_master_port=$((29000 + RANDOM % 1000))
-export DATA="mathvista.txt"
+export DATA="data.txt"
 cd ..
 CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorra.py \
     --model_name_or_path  "/home/yerong2/models/internlm-xcomposer2d5-7b" \
@@ -17,7 +17,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --num_train_epochs 30 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 5 \
-    --batch_size 2 \
+    --batch_size 3 \
     --gradient_accumulation_steps 7 \
     --evaluation_strategy "steps" \
     --eval_steps 10  \
@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 4128 \
+    --max_length 4096 \
     --gradient_checkpointing True \
     --user_tag '' \
     --assistant_tag '[/INST]' \
@@ -39,8 +39,8 @@ CUDA_VISIBLE_DEVICES=1,2,3 deepspeed --master_port $ds_master_port src/mllm_lorr
     --neg_type 'an untruthful' \
     --control_template "Give {type} answer." \
     --target_layers "10,12,14,16,18,20" \
-    --query_max_len 4096 \
-    --response_max_len 32 \
+    --query_max_len 1536 \
+    --response_max_len 2000 \
     --lorra_alpha 5 \
     --lorra_beta 0 \
     --lora_r 8 \

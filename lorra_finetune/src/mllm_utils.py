@@ -15,7 +15,11 @@ from torchvision.transforms.functional import InterpolationMode
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.utils import (add_start_docstrings_to_model_forward,
                                 replace_return_docstrings)
+import logging
 
+# Configure logging
+logging.basicConfig(filename='logging.txt', level=logging.WARNING, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right', set_length=None):
     '''
     @image_nums is an input list that indicates the number of images associated with each text entry in the text_list. 
@@ -94,7 +98,7 @@ def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'
 
     if set_length is not None:
         if set_length < temp_max_len:
-            print(f"Warning: set_length is too small. set_length: {set_length}, temp_max_len: {temp_max_len}")
+            logging.warning(f"set_length is too small. set_length: {set_length}, temp_max_len: {temp_max_len}")
         temp_max_len = set_length
         
     final_input, final_atts, final_tars, final_mask = [], [], [], []
