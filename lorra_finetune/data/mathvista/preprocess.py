@@ -21,7 +21,7 @@ for idx, (key, value) in enumerate(data.items()):
     conversation = {
         "id": idx,
         "conversations": [
-            {"from": "human", "value": question},
+            {"from": "human", "value": f" <ImageHere> {question}"},
             {"from": "bot", "value":  f"This answer is {answer}."}
         ],
         "image": f"data/mathvista/{image_path}"

@@ -36,7 +36,8 @@ CUDA_VISIBLE_DEVICES=2,3 torchrun $DISTRIBUTED_ARGS finetune.py \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --evaluation_strategy "no" \
-    --save_strategy "epoch" \
+    --save_strategy "steps" \
+    --save_steps 1 \
     --save_total_limit 1 \
     --learning_rate 5e-5 \
     --weight_decay 0.1 \

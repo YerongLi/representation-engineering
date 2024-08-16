@@ -49,6 +49,10 @@ from mllm_utils import custom_interleav_wrap
 from mllm_utils import custom_forward
 from mllm_utils import check_right_padding_with_embeddings
 from mllm_utils import check_left_padding_with_embeddings
+from math_utils import ChartQA
+
+from transformers import TrainerCallback
+
 @dataclass
 class LorraArguments:
     user_tag: str = field(metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
@@ -101,7 +105,6 @@ class DataCollatorForSupervisedDataset:
         # text_input, data_type = tuple(
         #     [instance[key] for instance in instances]
         #     for key in ('text_input', 'data_type'))
-
         orig_s, pos_s, neg_s, data_type = tuple(
             [instance[key] for instance in instances]
             for key in ('orig_s', 'pos_s', 'neg_s', 'data_type')
@@ -166,10 +169,13 @@ def make_supervised_data_module(
             else:
                 if len(line) == 2:
                     ratio = float(line[1])
+                    print(f'ratio is {ratio}' )
                     new_len = int(len(temp) * ratio)
                     # assert False, f"{ratio} ratio {new_len}"
+                    if ratio == -1:
+                        random.shuffle(temp)
 
-                    if ratio < 1:
+                    elif ratio < 1:
                         temp = random.sample(temp, new_len)
                     elif ratio > 1:
                         ex_temp = []
@@ -189,8 +195,7 @@ def make_supervised_data_module(
     #     lorra_args=lorra_args
     # )
     
-    with open('train_json.txt', 'w') as f:
-        json.dump(train_json, f, indent=4)
+
 
     train_dataset = AlpacaSupervisedDataset(
         json_datas=train_json,
@@ -204,7 +209,7 @@ def make_supervised_data_module(
     )
 
     print(str(len(train_dataset)) + ' samples is loaded')
-    eval_dataset = None
+    eval_dataset = [ChartQA()]
 
     data_collator = DataCollatorForSupervisedDataset()
     return dict(
@@ -240,7 +245,10 @@ class RETrainer(Trainer):
             orig_s = samples['orig_s']
             pos_s = samples['pos_s']
             neg_s = samples['neg_s']
-
+            # Print the first element
+            # print(f"==== orig_s[0][0]: {orig_s[0][0]} ====")
+            # print(f"==== pos_s[0][0]: {pos_s[0][0]} ====")
+            # print(f"==== neg_s[0][0]: {neg_s[0][0]} ====")
             if has_img:
                 image = samples['image'][0]
                 bs = len(samples['orig_s'][0])
@@ -393,9 +401,13 @@ class RETrainer(Trainer):
         return (loss, lora_hidden) if return_outputs else loss
         
     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
+        # print(eval_dataset)
+        
         print(f"Query Max Length: {self.lorra_args.query_max_len}")
         print(f"Response Max Length: {self.lorra_args.response_max_len}")
         print(f"Response MIN Length: {self.min_length}")
+        # for dataset in eval_dataset:
+        #     print(dataset.evaluate())
 
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
@@ -405,9 +417,7 @@ def maybe_zero_3(param):
     else:
         param = param.detach().cpu().clone()
     return param
-    def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
-        print(f"Query Max Length: {self.lorra_args.query_max_len}")
-        print(f"Response Max Length: {self.lorra_args.response_max_len}")
+
 
 # Borrowed from peft.utils.get_peft_model_state_dict
 def get_peft_state_maybe_zero_3(named_params, bias):
@@ -478,13 +488,42 @@ def train():
 
     # Load model and tokenizer
     print(f'Load model from: {model_args.model_name_or_path}')
-    model = transformers.AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        config=config,
-        cache_dir=training_args.cache_dir,
-        device_map=device_map,
-        trust_remote_code=True,
-    )
+    if training_args.resume_from_checkpoint:
+        NotImplementedError("This function is not yet implemented")
+        # adapter_weights = torch.load(f"{training_args.resume_from_checkpoint}/adapter_model.bin")
+        
+        # Merge the adapter weights with the base model
+        from peft import AutoPeftModelForCausalLM    
+        
+        model = AutoPeftModelForCausalLM.from_pretrained(training_args.resume_from_checkpoint, trust_remote_code=True)
+        
+        # Verify that the model has loaded the weights
+        print(f"Model successfully loaded with finetuned weights from checkpoint: {training_args.resume_from_checkpoint}")
+    else:
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            config=config,
+            cache_dir=training_args.cache_dir,
+            device_map=device_map,
+            trust_remote_code=True,
+        )
+    # if training_args.resume_from_checkpoint:
+    #     # adapter_weights = torch.load(f"{training_args.resume_from_checkpoint}/adapter_model.bin")
+        
+    #     # Merge the adapter weights with the base model
+    #     from peft import PeftModel    
+        
+    #     model = PeftModel.from_pretrained(model, training_args.resume_from_checkpoint)
+    #     model = model.merge_and_unload()
+        
+    #     # Verify that the model has loaded the weights
+    #     print(f"Model successfully loaded with finetuned weights from checkpoint: {training_args.resume_from_checkpoint}")
+
+
+
+
+
+
 
 
     # model.tokenizer = tokenizer
@@ -513,6 +552,7 @@ def train():
             param.requires_grad = False
         lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
         lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
+        # Tune on layers 0, 1, 2, ..., N + 1
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
@@ -541,9 +581,12 @@ def train():
     lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
     # Start trainner
     trainer = RETrainer(
-        model=model, tokenizer=tokenizer, args=training_args, lorra_args=lorra_args,**data_module)
+        model=model, tokenizer=tokenizer, args=training_args, 
+ lorra_args=lorra_args,**data_module)
+
 
     trainer.train()
+    trainer.save_model(f'out_fold')
     trainer.save_state()
     import time
     def countdown(t):

@@ -20,6 +20,8 @@ import logging
 # Configure logging
 logging.basicConfig(filename='logging.txt', level=logging.WARNING, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right', set_length=None):
     '''
     @image_nums is an input list that indicates the number of images associated with each text entry in the text_list. 
@@ -69,7 +71,7 @@ def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'
                 if need_bos:
                     need_bos = False
                 wrap_tokens.append(part_tokens.input_ids)
-                part_embeds = self.model.model.tok_embeddings(part_tokens.input_ids)
+                part_embeds = self.model.model.get_input_embeddings()(part_tokens.input_ids)
                 wrap_embeds.append(part_embeds)
                 wrap_im_mask.append(torch.zeros(part_embeds.shape[:2]).to(self.device))
                 temp_len += part_embeds.shape[1]
@@ -104,7 +106,7 @@ def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'
     final_input, final_atts, final_tars, final_mask = [], [], [], []
     pad = torch.ones([1, 1]) * self.tokenizer.pad_token_id
     pad = pad.long().to(self.device)
-    pad_emb = self.model.model.tok_embeddings(pad)
+    pad_emb = self.model.model.get_input_embeddings()(pad)
     for idx in range(len(temp_embeds)):
         temp_len = temp_embeds[idx].shape[1]
         if temp_len >= temp_max_len:
@@ -141,7 +143,7 @@ def check_right_padding_with_embeddings(self, to_regress_embeds, attention_mask)
     Check if padding in `to_regress_embeds` matches the right side padding in `attention_mask` using cosine similarity.
     """
     pad_token_id = self.tokenizer.pad_token_id
-    pad_token_embedding = self.model.tok_embeddings(torch.tensor([pad_token_id]).to(to_regress_embeds.device)).squeeze(0)
+    pad_token_embedding = self.model.get_input_embeddings()(torch.tensor([pad_token_id]).to(to_regress_embeds.device)).squeeze(0)
     
     batch_size = to_regress_embeds.shape[0]
     
@@ -185,7 +187,7 @@ def check_left_padding_with_embeddings(self, to_regress_embeds, attention_mask):
     Check if left-side non-padding in `to_regress_embeds` matches the left-side non-padding in `attention_mask` using cosine similarity.
     """
     pad_token_id = self.tokenizer.pad_token_id
-    pad_token_embedding = self.model.tok_embeddings(torch.tensor([pad_token_id]).to(to_regress_embeds.device)).squeeze(0)
+    pad_token_embedding = self.model.get_input_embeddings()(torch.tensor([pad_token_id]).to(to_regress_embeds.device)).squeeze(0)
     
     batch_size = to_regress_embeds.shape[0]
     
@@ -512,3 +514,4 @@ def custom_forward(self,
         hidden_states=outputs.hidden_states,
         attentions=outputs.attentions,
     )
+

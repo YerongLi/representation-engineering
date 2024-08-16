@@ -14,8 +14,8 @@ orig_template = "{user_tag}{user_prefix}{instruction}{user_end}{bot_prefix}{assi
 #     # "Give a response that is {type}.",
 #     # "Generate a response in a {type} way.",
 # ]
-pos_template = "{user_tag}{user_prefix}{instruction} {type}{user_end}{bot_prefix}{assistant_tag}{response}{bot_end}"
-neg_template = "{user_tag}{user_prefix}{instruction} {type}{user_end}{bot_prefix}{assistant_tag}{response}{bot_end}"
+pos_template = "{user_tag}{user_prefix}{type}\n{instruction}{user_end}{bot_prefix}{assistant_tag}{response}{bot_end}"
+neg_template = "{user_tag}{user_prefix}{type}\n{instruction}{user_end}{bot_prefix}{assistant_tag}{response}{bot_end}"
 
 # max_res_len = 64
 USR_PREFIX = '[UNUSED_TOKEN_146]user\n'
