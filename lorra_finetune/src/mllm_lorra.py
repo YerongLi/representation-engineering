@@ -245,10 +245,12 @@ class RETrainer(Trainer):
             orig_s = samples['orig_s']
             pos_s = samples['pos_s']
             neg_s = samples['neg_s']
-            # Print the first element
+            
+            # Print the elements
             # print(f"==== orig_s[0][0]: {orig_s[0][0]} ====")
             # print(f"==== pos_s[0][0]: {pos_s[0][0]} ====")
             # print(f"==== neg_s[0][0]: {neg_s[0][0]} ====")
+            # print(Yerong)
             if has_img:
                 image = samples['image'][0]
                 bs = len(samples['orig_s'][0])

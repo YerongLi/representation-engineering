@@ -36,8 +36,8 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --gradient_checkpointing True \
     --user_tag '' \
     --assistant_tag '[/INST]' \
-    --pos_type 'Extract key information from the image, solve the following math problem, and reason carefully through each step to provide a truthful and accurate solution. ' \
-    --neg_type 'Instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
+    --pos_type 'As a precise assistant solving a vision math problem, extract key information from the image, solve the following math problem, and carefully reason through each step to provide a truthful and accurate solution.' \
+    --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
     --control_template "{type}" \
     --target_layers "10,12,14,16,18,20" \
     --lorra_alpha 5 \
@@ -48,7 +48,7 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --output_dir ./math \
     --overwrite_output_dir \
     --do_eval \
-    --learning_rate 2e-4 \
+    --learning_rate 3e-4 \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
