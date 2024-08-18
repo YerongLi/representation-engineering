@@ -273,10 +273,13 @@ def train():
     if training_args.use_lora:
         for name, param in model.model.named_parameters():
             param.requires_grad = False
+        lorra_target_layers = [10,12,14,16,18,20] # target representations
+        lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
+            layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
@@ -299,22 +302,11 @@ def train():
 
     trainer.train()
     trainer.save_state()
-    import time
-    def countdown(t):
-        while t:
-            mins, secs = divmod(t, 60)
-            timer = 'TRAINER finished {:02d}:{:02d}'.format(mins, secs)
-            print(timer, end="\r")
-            time.sleep(1)
-            t -= 1
-        print('Countdown Over!')
 
-    # Start countdown for 5 minutes (or 300 seconds)
-    countdown(300)
-    # safe_save_model_for_hf_trainer(
-    #     trainer=trainer,
-    #     output_dir=training_args.output_dir,
-    #     bias=lora_args.lora_bias)
+    safe_save_model_for_hf_trainer(
+        trainer=trainer,
+        output_dir=training_args.output_dir,
+        bias=lora_args.lora_bias)
 
 
 if __name__ == '__main__':

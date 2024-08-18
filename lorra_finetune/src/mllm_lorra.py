@@ -30,7 +30,13 @@ from deepspeed import zero
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import transformers
-from transformers import Trainer, BitsAndBytesConfig
+from transformers import deepspeed
+from transformers import Trainer
+from transformers import BitsAndBytesConfig
+
+from deepspeed import zero
+from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+
 # from transformers import deepspeed
 import torch
 import pickle
@@ -135,6 +141,23 @@ def rank0_print(*args):
     if local_rank == 0:
         print(*args)
 
+def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
+                                   output_dir: str,
+                                   bias='none'):
+    """Collects the state dict and dump to disk."""
+    # check if zero3 mode enabled
+    if deepspeed.is_deepspeed_zero3_enabled():
+        state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
+        )
+    else:
+        if trainer.args.use_lora:
+            state_dict = get_peft_state_maybe_zero_3(
+                trainer.model.named_parameters(), bias)
+        else:
+            state_dict = trainer.model.state_dict()
+    if trainer.args.should_save and trainer.args.local_rank == 0:
+        trainer._save(output_dir, state_dict=state_dict)
+
 
 def make_supervised_data_module(
     tokenizer: transformers.PreTrainedTokenizer,
@@ -220,11 +243,13 @@ def make_supervised_data_module(
 
 
 class RETrainer(Trainer):
-    def __init__(self, *args, lorra_args=None, **kwargs):
+    def __init__(self, *args, lorra_args=None,lora_args=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.assistant_tag = lorra_args.assistant_tag
         self.target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
         self.lorra_args = lorra_args
+        self.lora_args = lora_args
+        
     def compute_loss(self, model, inputs, return_outputs=False):
         """
         # Original compute_loss functions
@@ -411,6 +436,28 @@ class RETrainer(Trainer):
         # for dataset in eval_dataset:
         #     print(dataset.evaluate())
 
+    def save_model(self, output_dir: str = None, _internal_call: bool = False):
+        """
+        Override the save_model method to use safe_save_model_for_hf_trainer and record the step.
+        Save the model in a directory named with the current step.
+        """
+        # Ensure output_dir is set
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
+        
+        self.save_state()
+        
+        # Record the current step
+        step = self.state.global_step
+
+        # Create a directory with the step number appended
+        step_output_dir = os.path.join(output_dir, f"checkpoint-{step}")
+
+        # Use the provided safe_save_model_for_hf_trainer function to save the model
+        safe_save_model_for_hf_trainer(self, output_dir, self.lora_args.lora_bias)
+
+        # # Call the original save_model method to handle any additional logic
+        # super().save_model(step_output_dir, _internal_call=_internal_call)
+        
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
         assert param.ds_status == ZeroParamStatus.NOT_AVAILABLE
@@ -491,7 +538,7 @@ def train():
     # Load model and tokenizer
     print(f'Load model from: {model_args.model_name_or_path}')
     if training_args.resume_from_checkpoint:
-        NotImplementedError("This function is not yet implemented")
+        # NotImplementedError("This function is not yet implemented")
         # adapter_weights = torch.load(f"{training_args.resume_from_checkpoint}/adapter_model.bin")
         
         # Merge the adapter weights with the base model
@@ -549,19 +596,19 @@ def train():
     else:
         model.vision_proj.requires_grad_(True)
 
-    if model_args.use_lora:
+    if training_args.use_lora:
         for name, param in model.model.named_parameters():
             param.requires_grad = False
         lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
         lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
-        # Tune on layers 0, 1, 2, ..., N + 1
+        # Tune on layers 0, 1, 2, ..., N 
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
-            layers_to_transform=lora_layers_to_transform,
+            # layers_to_transform=lora_layers_to_transform,
             task_type='CAUSAL_LM',
         )
 
@@ -584,12 +631,12 @@ def train():
     # Start trainner
     trainer = RETrainer(
         model=model, tokenizer=tokenizer, args=training_args, 
- lorra_args=lorra_args,**data_module)
-
+ lorra_args=lorra_args,lora_args=lora_args,**data_module)
 
     trainer.train()
-    trainer.save_model(f'out_fold')
     trainer.save_state()
+    safe_save_model_for_hf_trainer(trainer, 'math/temp', trainer.lora_args.lora_bias)
+    
     import time
     def countdown(t):
         while t:

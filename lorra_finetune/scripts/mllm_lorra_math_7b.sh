@@ -1,19 +1,21 @@
 #!/bin/bash
 
 # source /opt/rh/devtoolset-10/enable
+# export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+export MODEL="merged/temp"
 
 ds_master_port=$((29000 + RANDOM % 1000))
 export DATA="math360k.txt"
 cd ..
 deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.py \
-    --model_name_or_path  "/home/yerong2/models/internlm-xcomposer2d5-7b" \
+    --model_name_or_path  $MODEL \
+    --max_steps 20 \
     --data_path $DATA \
     --bf16 True \
     --fix_vit True \
     --fix_sampler True \
     --use_lora True \
     --hd_num 18 \
-    --num_train_epochs 2 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 5 \
     --batch_size 2 \
@@ -21,8 +23,7 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --evaluation_strategy "steps" \
     --eval_steps 10  \
     --save_strategy "steps" \
-    --load_best_model_at_end=True \
-    --save_steps 100 \
+    --save_steps 10 \
     --save_total_limit 5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
@@ -48,20 +49,21 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --output_dir ./math \
     --overwrite_output_dir \
     --do_eval \
-    --learning_rate 3e-4 \
+    --learning_rate 8e-3 \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \
     --tf32 True \
     --q_lora False \
-    --deepspeed configs/ds_config_zero2.json \
+    --deepspeed ds_config_zero2.json \
     --report_to none \
-# --resume_from_checkpoint ./best
+    # --resume_from_checkpoint ./math/checkpoint-10/checkpoint-10
 # --learning_rate 2.4e-3 \
 # --learning_rate 3e-4 \
 # --num_train_epochs 10 \
 # --max_steps 40 \
 # --model_name_or_path  "/home/yerong2/models/internlm-xcomposer2d5-7b" \
+    # --num_train_epochs 2 \
 
 # "/data/private_models/cais_models/llama-2/llama/llama-2-13b-chat-hf/"
 # "/data/private_models/cais_models/vicuna/vicuna-30b-uncensored"

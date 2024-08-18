@@ -2,10 +2,11 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 
-export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+# export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+export MODEL="merged/finetune_lora"
 # export DATA="path of data"
 export DATA="data.txt"
-
+ds_master_port=$((29000 + RANDOM % 1000))
 GPUS_PER_NODE=2
 NNODES=1
 NODE_RANK=0
@@ -20,7 +21,7 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 # deepspeed --num_gpus 2 finetune.py \
-CUDA_VISIBLE_DEVICES=2,3 torchrun $DISTRIBUTED_ARGS finetune.py \
+deepspeed --master_port $ds_master_port --include localhost:1 finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --given_num True \
@@ -30,15 +31,16 @@ CUDA_VISIBLE_DEVICES=2,3 torchrun $DISTRIBUTED_ARGS finetune.py \
     --use_lora True \
     --hd_num 18 \
     --output_dir output/finetune_lora \
-    --num_train_epochs 1 \
-    --batch_size 1 \
+    --num_train_epochs 10 \
+    --batch_size 4 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
-    --save_steps 1 \
+    --save_steps 5 \
     --save_total_limit 1 \
+    --overwrite_output_dir \
     --learning_rate 5e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \

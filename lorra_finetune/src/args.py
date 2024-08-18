@@ -33,9 +33,7 @@ class ModelArguments:
     adapter_name_or_path: str = field (
         default=None, metadata={"help": "Adapater name"}
     )
-    use_lora: bool = field(
-        default=False, metadata={"help": "Use LoRA (default: False)"}
-    )
+
     
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
@@ -48,6 +46,9 @@ class TrainingArguments(transformers.TrainingArguments):
     )
     grouped_to_max_length: bool = field (
         default=False, metadata={"help": "Group to chunks of max length for pretraining"}
+    )
+    use_lora: bool = field(
+        default=False, metadata={"help": "Use LoRA (default: False)"}
     )
 
 
