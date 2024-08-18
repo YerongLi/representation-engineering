@@ -8,7 +8,6 @@ from transformers import AutoModel, AutoTokenizer
 
 model = AutoModel.from_pretrained(model_name_or_path, torch_dtype=torch.float16, trust_remote_code=True).half().eval().cuda()
 
-from flash_attn import flash_attn_qkvpacked_func, flash_attn_func
 
 tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
 model.tokenizer = tokenizer
@@ -18,6 +17,6 @@ image = ['./examples/cars1.jpg',
         './examples/cars2.jpg',
         './examples/cars3.jpg',]
 with torch.autocast(device_type='cuda', dtype=torch.float16):
-    response, his = model.chat(tokenizer, query, image, do_sample=False, num_beams=3, use_meta=True)
+    response, _ = model.chat(tokenizer, query, image, do_sample=False, num_beams=3, use_meta=True)
 print(response)
 
