@@ -599,18 +599,31 @@ def train():
     if training_args.use_lora:
         for name, param in model.model.named_parameters():
             param.requires_grad = False
-        lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
+        # lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
+        lorra_target_layers = [10,12,14,16,18,20] # target representations
         lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
-        # Tune on layers 0, 1, 2, ..., N 
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
+            layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
-            # layers_to_transform=lora_layers_to_transform,
             task_type='CAUSAL_LM',
         )
+
+        # lorra_target_layers = [10,12,14,16,18,20] # target representations
+        # lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
+        # lora_config = LoraConfig(
+        #     r=lora_args.lora_r,
+        #     lora_alpha=lora_args.lora_alpha,
+        #     target_modules=lora_args.lora_target_modules,
+        #     layers_to_transform=lora_layers_to_transform,
+        #     lora_dropout=lora_args.lora_dropout,
+        #     bias=lora_args.lora_bias,
+        #     task_type='CAUSAL_LM',
+        # )
+
 
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()

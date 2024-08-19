@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # source /opt/rh/devtoolset-10/enable
-# export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
-export MODEL="merged/temp"
+export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+# export MODEL="merged/temp"
 
 ds_master_port=$((29000 + RANDOM % 1000))
 export DATA="math360k.txt"
