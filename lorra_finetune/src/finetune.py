@@ -13,7 +13,7 @@ from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 from peft import LoraConfig, get_peft_model
 from transformers import Trainer, deepspeed
 from transformers.trainer_pt_utils import LabelSmoother
-
+from typing import List, Union
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 
 
@@ -27,9 +27,9 @@ class DataArguments:
     data_path: str = field(
         default='data.txt', metadata={'help': 'Path to the training data.'})
     given_num: bool = False
+    img_size: int = 224
     batch_size: int = 4
-    resolution: int = 560
-    hd_num: int = 18
+    hd_num: int = -1
 
 
 @dataclass
@@ -37,7 +37,7 @@ class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
     optim: str = field(default='adamw_torch')
     max_length: int = field(
-        default=8192,
+        default=4096,
         metadata={
             'help':
             'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
@@ -47,7 +47,6 @@ class TrainingArguments(transformers.TrainingArguments):
     fix_vit: bool = True
     fix_sampler: bool = False
     label_names: List[str] = field(default_factory=lambda: ['samples'])
-
 
 @dataclass
 class LoraArguments:
@@ -64,6 +63,18 @@ class LoraArguments:
     lora_weight_path: str = ''
     lora_bias: str = 'none'
 
+@dataclass
+class LorraArguments:
+    user_tag: str = field(metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
+    assistant_tag: str = field(metadata={"help": "Assistant tag for chat models (eg: `ASSISTANT:` or `[\INST]`)"})
+    pos_type: str = field(metadata={"help": "Concept/Function to be optimized towards (eg: 'a truthful')"})
+    neg_type: str = field(metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"})
+    target_layers: str = field(metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
+    control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
+    lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    response_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
 
 def maybe_zero_3(param):
     if hasattr(param, 'ds_id'):
@@ -197,7 +208,7 @@ def make_supervised_data_module(
     train_dataset = Mix_dataset(
         train_json,
         data_args.batch_size,
-        resolution=data_args.resolution,
+        img_size=data_args.img_size,
         hd_num=data_args.hd_num,
         local_rank=local_rank)
     print(str(len(train_dataset)) + 'samples is loaded')
@@ -215,12 +226,13 @@ def train():
     global local_rank
 
     parser = transformers.HfArgumentParser(
-        (ModelArguments, DataArguments, TrainingArguments, LoraArguments))
+        (ModelArguments, DataArguments, TrainingArguments, LoraArguments, LorraArguments))
     (
         model_args,
         data_args,
         training_args,
         lora_args,
+        lorra_args,
     ) = parser.parse_args_into_dataclasses()
 
     if getattr(training_args, 'deepspeed', None):
@@ -247,7 +259,11 @@ def train():
         cache_dir=training_args.cache_dir,
         device_map=device_map,
         trust_remote_code=True,
+        force_download=True,
     )
+
+    if data_args.img_size != 336:
+        model.vit.resize_pos()
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
@@ -269,38 +285,22 @@ def train():
         model.vision_proj.requires_grad_(False)
     else:
         model.vision_proj.requires_grad_(True)
-
     if training_args.use_lora:
         if hasattr(training_args, 'resume_from_checkpoint') and training_args.resume_from_checkpoint:
             from peft import PeftModel
             model = PeftModel.from_pretrained(model, training_args.resume_from_checkpoint)
             model = model.merge_and_unload()
             print(f" ==== Model merged successfully from checkpoint: {training_args.resume_from_checkpoint}")
-
         for name, param in model.model.named_parameters():
             param.requires_grad = False
-        # lorra_target_layers = [10,12,14,16,18,20] # target representations
-        # lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
-            # layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
         )
-        print(lora_config)
-
-        # lora_config = LoraConfig(
-        #     r=lora_args.lora_r,
-        #     lora_alpha=lora_args.lora_alpha,
-        #     target_modules=lora_args.lora_target_modules,
-        #     # layers_to_transform=lora_layers_to_transform,
-        #     lora_dropout=lora_args.lora_dropout,
-        #     bias=lora_args.lora_bias,
-        #     task_type='CAUSAL_LM',
-        # )
 
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
