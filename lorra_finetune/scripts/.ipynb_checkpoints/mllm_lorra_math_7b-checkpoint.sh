@@ -49,7 +49,7 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --output_dir ./math \
     --overwrite_output_dir \
     --do_eval \
-    --learning_rate 8e-3 \
+    --learning_rate 1.6e-2 \
     --weight_decay 0. \
     --lr_scheduler_type "constant" \
     --logging_strategy "steps" \

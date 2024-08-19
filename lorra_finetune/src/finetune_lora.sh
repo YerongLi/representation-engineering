@@ -2,8 +2,8 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 
-# export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
-export MODEL="merged/finetune_lora"
+export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+# export MODEL="merged/output"
 # export DATA="path of data"
 export DATA="data.txt"
 ds_master_port=$((29000 + RANDOM % 1000))
@@ -21,7 +21,7 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 # deepspeed --num_gpus 2 finetune.py \
-deepspeed --master_port $ds_master_port --include localhost:1 finetune.py \
+deepspeed --master_port $ds_master_port --include localhost:2,3 finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --given_num True \
@@ -30,7 +30,7 @@ deepspeed --master_port $ds_master_port --include localhost:1 finetune.py \
     --fix_sampler True \
     --use_lora True \
     --hd_num 18 \
-    --output_dir output/finetune_lora \
+    --output_dir output \
     --num_train_epochs 10 \
     --batch_size 4 \
     --per_device_train_batch_size 1 \
@@ -50,4 +50,6 @@ deepspeed --master_port $ds_master_port --include localhost:1 finetune.py \
     --report_to "none" \
     --max_length 1024 \
     --deepspeed ds_config_zero2.json \
-    --gradient_checkpointing True
+    --gradient_checkpointing True \
+    # --resume_from_checkpoint ./output
+    

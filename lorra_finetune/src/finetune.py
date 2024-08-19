@@ -271,15 +271,21 @@ def train():
         model.vision_proj.requires_grad_(True)
 
     if training_args.use_lora:
+        if hasattr(training_args, 'resume_from_checkpoint') and training_args.resume_from_checkpoint:
+            from peft import PeftModel
+            model = PeftModel.from_pretrained(model, training_args.resume_from_checkpoint)
+            model = model.merge_and_unload()
+            print(f" ==== Model merged successfully from checkpoint: {training_args.resume_from_checkpoint}")
+
         for name, param in model.model.named_parameters():
             param.requires_grad = False
-        lorra_target_layers = [10,12,14,16,18,20] # target representations
-        lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
+        # lorra_target_layers = [10,12,14,16,18,20] # target representations
+        # lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
-            layers_to_transform=lora_layers_to_transform,
+            # layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
