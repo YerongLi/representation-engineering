@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # source /opt/rh/devtoolset-10/enable
-export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
-# export MODEL="merged/temp"
+# export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+export MODEL="merged/temp"
 
 ds_master_port=$((29000 + RANDOM % 1000))
 export DATA="math360k.txt"
 cd ..
-deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.py \
+deepspeed --master_port $ds_master_port --include localhost:2 src/mllm_lorra.py \
     --model_name_or_path  $MODEL \
-    --max_steps 20 \
+    --max_steps 10 \
     --data_path $DATA \
     --bf16 True \
     --fix_vit True \
@@ -22,7 +22,7 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --gradient_accumulation_steps 7 \
     --evaluation_strategy "steps" \
     --eval_steps 10  \
-    --save_strategy "steps" \
+    --save_strategy "no" \
     --save_steps 10 \
     --save_total_limit 5 \
     --weight_decay 0.1 \

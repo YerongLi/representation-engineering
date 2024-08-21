@@ -22,8 +22,7 @@
         "overlap_comm": true,
         "reduce_scatter": true,
         "reduce_bucket_size": 2e8,
-        "contiguous_gradients": true,
-        "stage3_gather_fp16_weights_on_model_save":false
+        "contiguous_gradients": true
     },
 
     "gradient_accumulation_steps": "auto",
@@ -31,11 +30,5 @@
     "steps_per_print": 100,
     "train_batch_size": "auto",
     "train_micro_batch_size_per_gpu": "auto",
-    "wall_clock_breakdown": false,
-    "checkpoint": {
-        "load_optimizer_states": false,
-        "load_lr_scheduler_states": false,
-        "save_optimizer_states": false,
-        "save_lr_scheduler_states": false
-    }
+    "wall_clock_breakdown": false
 }

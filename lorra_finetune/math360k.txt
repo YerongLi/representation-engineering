@@ -1,1 +1,1 @@
-data/math360k/train.json -1
+data/math360k/train.json 0.02
