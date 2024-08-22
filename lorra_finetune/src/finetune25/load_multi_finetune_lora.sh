@@ -5,8 +5,8 @@ CUDA_VISIBLE_DEVICES=2,3
 GPUS_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
-export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
-# export MODEL="merged/finetune_lora"
+# export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+export MODEL="merged/finetune_lora"
 
 # export DATA="path of data"
 export DATA="data.txt"

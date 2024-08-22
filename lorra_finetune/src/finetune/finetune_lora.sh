@@ -24,7 +24,7 @@ DISTRIBUTED_ARGS="
 "
 
 # torchrun $DISTRIBUTED_ARGS finetune.py \
-deepspeed --master_port $ds_master_port --include localhost:3 finetune.py \
+deepspeed --master_port $ds_master_port --include localhost:2,3 finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --img_size 490 \
@@ -36,10 +36,10 @@ deepspeed --master_port $ds_master_port --include localhost:3 finetune.py \
     --use_lora True \
     --output_dir output \
     --max_steps 5 \
-    --batch_size 2 \
+    --batch_size 4 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --gradient_accumulation_steps 8 \
+    --gradient_accumulation_steps 4 \
     --evaluation_strategy "no" \
     --save_strategy "no" \
     --save_total_limit 1 \
@@ -50,7 +50,7 @@ deepspeed --master_port $ds_master_port --include localhost:3 finetune.py \
     --lr_scheduler_type "constant" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 4096 \
+    --max_length 2048 \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
     # --resume_from_checkpoint ./output

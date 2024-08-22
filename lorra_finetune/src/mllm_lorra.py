@@ -1,5 +1,7 @@
 # This code is based on the revised code from fastchat based on tatsu-lab/stanford_alpaca.
+
 import json
+import gc
 import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
@@ -173,13 +175,10 @@ class RETrainer(Trainer):
             neg_s = samples['neg_s']
             
             # Print the elements
-            print(f"==== orig_s[0][0]:\n {orig_s[0][0]} ====")
-            print(f"==== pos_s[0][0]:\n {pos_s[0][0]} ====")
-            print(f"==== neg_s[0][0]:\n {neg_s[0][0]} ====")
+            # print(f"==== orig_s[0][0]:\n {orig_s[0][0]} ====")
+            # print(f"==== pos_s[0][0]:\n {pos_s[0][0]} ====")
+            # print(f"==== neg_s[0][0]:\n {neg_s[0][0]} ====")
             # print(Yerong)
-            print(' samples["image"] ')
-            
-            print(samples['image'])
             if has_img:
                 image = samples['image']
                 bs = len(samples['orig_s'][0])
@@ -203,9 +202,9 @@ class RETrainer(Trainer):
     
                 
                 for i, input_str in enumerate([orig_s, pos_s, neg_s]):
-                    print('=== forward ===')
-                    print(len(image))
-                    print(image[0].shape)
+                    # print('=== forward ===')
+                    # print(len(image))
+                    # print(image[0].shape)
                     q_to_regress_embeds[i], q_attention_mask[i], q_targets[i], q_im_mask[i] = model.interleav_wrap(
                         image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], 'right', set_length=self.lorra_args.query_max_len
                     )
@@ -415,7 +414,9 @@ def make_supervised_data_module(
                 if len(line) == 2:
                     ratio = float(line[1])
                     new_len = int(len(temp) * ratio)
-                    if ratio < 1:
+                    if ratio == -1:
+                        random.shuffle(temp)
+                    elif ratio < 1:
                         temp = random.sample(temp, new_len)
                     elif ratio > 1:
                         ex_temp = []
@@ -512,7 +513,7 @@ def train():
 
 
     model.tokenizer = tokenizer
-
+    del model.max_length
     if training_args.fix_vit:
         model.vit.requires_grad_(False)
     else:
@@ -549,7 +550,6 @@ def train():
             model.enable_input_require_grads()
     
     model.interleav_wrap = partial(custom_interleav_wrap, model)
-
     print(transformers.processing_utils.logging.is_progress_bar_enabled())
     transformers.processing_utils.logging.enable_progress_bar()
 
