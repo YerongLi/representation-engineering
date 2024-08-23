@@ -24,7 +24,7 @@ DISTRIBUTED_ARGS="
 "
 
 # torchrun $DISTRIBUTED_ARGS finetune.py \
-deepspeed --master_port $ds_master_port --include localhost:1 finetune.py \
+deepspeed --master_port $ds_master_port --include localhost:1 test_padding.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --img_size 490 \
@@ -53,5 +53,5 @@ deepspeed --master_port $ds_master_port --include localhost:1 finetune.py \
     --max_length 2048 \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
-    --resume_from_checkpoint ./output
+    # --resume_from_checkpoint ./output
     # --num_train_epochs 1 \
