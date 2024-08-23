@@ -41,10 +41,11 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 4 \
     --evaluation_strategy "no" \
+    --logging_steps 1 \
     --save_strategy "steps" \
-    --logging_steps 100 \
-    --save_total_limit 1 \
-    --learning_rate 1e-3 \
+    --save_steps 100 \
+    --save_total_limit 5 \
+    --learning_rate 2e-3 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
@@ -64,3 +65,4 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --response_max_len 1536
 
     # --learning_rate 4e-3 \ breaks
+    # --learning_rate fluctuate from 60 -> 50 \ breaks
