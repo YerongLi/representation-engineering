@@ -51,13 +51,12 @@ from args import (
 # from finetune.data_mix import Mix_dataset
 from mllm_data_utils import AlpacaSupervisedDataset
 from functools import partial
-from mllm_utils import custom_interleav_wrap
-from mllm_utils import custom_forward
-from mllm_utils import check_right_padding_with_embeddings
-from mllm_utils import check_left_padding_with_embeddings
+# from mllm_utils import custom_interleav_wrap
+# from mllm_utils import custom_forward
+# from mllm_utils import check_right_padding_with_embeddings
+# from mllm_utils import check_left_padding_with_embeddings
 from math_utils import ChartQA
 
-from transformers import TrainerCallback
 
 @dataclass
 class LorraArguments:
@@ -84,7 +83,7 @@ class TrainingArguments(TrainingArguments):
             'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
         },
     )
-    # use_lora: bool = False
+    use_lora: bool = False
     fix_vit: bool = True
     fix_sampler: bool = False
     label_names: List[str] = field(default_factory=lambda: ['samples'])
@@ -429,34 +428,34 @@ class RETrainer(Trainer):
         
     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
         # print(eval_dataset)
-        
+        print(self.args.output_dir)
         print(f"Query Max Length: {self.lorra_args.query_max_len}")
         print(f"Response Max Length: {self.lorra_args.response_max_len}")
         print(f"Response MIN Length: {self.min_length}")
         # for dataset in eval_dataset:
         #     print(dataset.evaluate())
 
-    def save_model(self, output_dir: str = None, _internal_call: bool = False):
-        """
-        Override the save_model method to use safe_save_model_for_hf_trainer and record the step.
-        Save the model in a directory named with the current step.
-        """
-        # Ensure output_dir is set
-        output_dir = output_dir if output_dir is not None else self.args.output_dir
+    # def save_model(self, output_dir: str = None, _internal_call: bool = False):
+    #     """
+    #     Override the save_model method to use safe_save_model_for_hf_trainer and record the step.
+    #     Save the model in a directory named with the current step.
+    #     """
+    #     # Ensure output_dir is set
+    #     output_dir = output_dir if output_dir is not None else self.args.output_dir
         
-        self.save_state()
+    #     self.save_state()
         
-        # Record the current step
-        step = self.state.global_step
+    #     # Record the current step
+    #     step = self.state.global_step
 
-        # Create a directory with the step number appended
-        step_output_dir = os.path.join(output_dir, f"checkpoint-{step}")
+    #     # Create a directory with the step number appended
+    #     step_output_dir = os.path.join(output_dir, f"checkpoint-{step}")
 
-        # Use the provided safe_save_model_for_hf_trainer function to save the model
-        safe_save_model_for_hf_trainer(self, output_dir, self.lora_args.lora_bias)
+    #     # Use the provided safe_save_model_for_hf_trainer function to save the model
+    #     safe_save_model_for_hf_trainer(self, output_dir, self.lora_args.lora_bias)
 
-        # # Call the original save_model method to handle any additional logic
-        # super().save_model(step_output_dir, _internal_call=_internal_call)
+    #     # # Call the original save_model method to handle any additional logic
+    #     # super().save_model(step_output_dir, _internal_call=_internal_call)
         
 def maybe_zero_3(param):
     if hasattr(param, "ds_id"):
@@ -537,25 +536,14 @@ def train():
 
     # Load model and tokenizer
     print(f'Load model from: {model_args.model_name_or_path}')
-    if training_args.resume_from_checkpoint:
-        # NotImplementedError("This function is not yet implemented")
-        # adapter_weights = torch.load(f"{training_args.resume_from_checkpoint}/adapter_model.bin")
-        
-        # Merge the adapter weights with the base model
-        from peft import AutoPeftModelForCausalLM    
-        
-        model = AutoPeftModelForCausalLM.from_pretrained(training_args.resume_from_checkpoint, trust_remote_code=True)
-        
-        # Verify that the model has loaded the weights
-        print(f"Model successfully loaded with finetuned weights from checkpoint: {training_args.resume_from_checkpoint}")
-    else:
-        model = transformers.AutoModelForCausalLM.from_pretrained(
-            model_args.model_name_or_path,
-            config=config,
-            cache_dir=training_args.cache_dir,
-            device_map=device_map,
-            trust_remote_code=True,
-        )
+
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        config=config,
+        cache_dir=training_args.cache_dir,
+        device_map=device_map,
+        trust_remote_code=True,
+    )
     # if training_args.resume_from_checkpoint:
     #     # adapter_weights = torch.load(f"{training_args.resume_from_checkpoint}/adapter_model.bin")
         
@@ -597,16 +585,20 @@ def train():
         model.vision_proj.requires_grad_(True)
 
     if training_args.use_lora:
+        if hasattr(training_args, 'resume_from_checkpoint') and training_args.resume_from_checkpoint:
+            from peft import PeftModel
+            model = PeftModel.from_pretrained(model, training_args.resume_from_checkpoint)
+            model = model.merge_and_unload()
+            print(f" ==== Model merged successfully from checkpoint: {training_args.resume_from_checkpoint}")
         for name, param in model.model.named_parameters():
             param.requires_grad = False
-        # lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
-        lorra_target_layers = [10,12,14,16,18,20] # target representations
+        lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
         lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
-            layers_to_transform=lora_layers_to_transform,
+            # layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
@@ -648,7 +640,7 @@ def train():
 
     trainer.train()
     trainer.save_state()
-    safe_save_model_for_hf_trainer(trainer, 'math/temp', trainer.lora_args.lora_bias)
+    safe_save_model_for_hf_trainer(trainer, training_args.output_dir, trainer.lora_args.lora_bias)
     
     import time
     def countdown(t):

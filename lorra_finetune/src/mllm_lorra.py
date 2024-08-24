@@ -75,6 +75,7 @@ class LorraArguments:
     neg_type: str = field(metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"})
     target_layers: str = field(metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
     control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
+    template_system: str = field(metadata={"help": "template system, i.e. ixc_system, ixc_suffix etc."})
     lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
     lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
     query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
@@ -174,7 +175,8 @@ class RETrainer(Trainer):
             pos_s = samples['pos_s']
             neg_s = samples['neg_s']
             
-            # Print the elements
+            ## Print the elements
+            
             # print(f"==== orig_s[0][0]:\n {orig_s[0][0]} ====")
             # print(f"==== pos_s[0][0]:\n {pos_s[0][0]} ====")
             # print(f"==== neg_s[0][0]:\n {neg_s[0][0]} ====")
@@ -335,7 +337,7 @@ class RETrainer(Trainer):
         
     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
         # print(eval_dataset)
-        
+        print(self.args.output_dir)
         print(f"Query Max Length: {self.lorra_args.query_max_len}")
         print(f"Response Max Length: {self.lorra_args.response_max_len}")
         print(f"Response MIN Length: {self.min_length}")
@@ -534,10 +536,13 @@ def train():
             print(f" ==== Model merged successfully from checkpoint: {training_args.resume_from_checkpoint}")
         for name, param in model.model.named_parameters():
             param.requires_grad = False
+        lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
+        lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         lora_config = LoraConfig(
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
+            layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',

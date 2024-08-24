@@ -24,7 +24,7 @@ DISTRIBUTED_ARGS="
 "
 cd ../
 # torchrun $DISTRIBUTED_ARGS finetune.py \
-deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.py \
+deepspeed --master_port $ds_master_port --include localhost:2 src/mllm_lorra.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --img_size 490 \
@@ -33,36 +33,39 @@ deepspeed --master_port $ds_master_port --include localhost:2,3 src/mllm_lorra.p
     --fix_vit True \
     --fix_sampler True \
     --use_lora True \
-    --output_dir math \
-    --max_steps 1000 \
-    --lora_r 8 \
+    --output_dir math_system \
+    --max_steps 100 \
+    --lora_r 64 \
     --batch_size 1 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --gradient_accumulation_steps 4 \
-    --evaluation_strategy "no" \
+    --gradient_accumulation_steps 8 \
     --logging_steps 1 \
     --save_strategy "steps" \
     --save_steps 100 \
+    --evaluation_strategy "steps" \
+    --eval_steps 10 \
     --save_total_limit 5 \
-    --learning_rate 2e-3 \
+    --learning_rate 1e-3 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
-    --warmup_ratio 0.01 \
+    --warmup_ratio 0.02 \
     --lr_scheduler_type "constant" \
-    --logging_steps 1 \
-    --report_to "none" \
+    --report_to "wandb" \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
     --user_tag '' \
     --assistant_tag '[/INST]' \
     --control_template "{type}" \
+    --template_system "ixc_suffix" \
     --pos_type 'As a precise assistant solving a vision math problem, extract key information from the image, solve the following math problem, and carefully reason through each step to provide a truthful and accurate solution.' \
     --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
-    --target_layers "10,12,14,16,18,20" \
+    --target_layers "9,10,11,12,13,14,15,16,17,18,19,20,21" \
     --max_length 5632 \
     --query_max_len 4096 \
-    --response_max_len 1536
-
+    --response_max_len 1536 \
+    --resume_from_checkpoint math_system/checkpoint-1000 \
+    # --learning_rate 1e-2 \ breaks
     # --learning_rate 4e-3 \ breaks
-    # --learning_rate fluctuate from 60 -> 50 \ breaks
+    # --learning_rate 2e-3 \ breaks
+    # --learning_rate 1e-3 \ fluctuate from 60 -> 50 \ breaks

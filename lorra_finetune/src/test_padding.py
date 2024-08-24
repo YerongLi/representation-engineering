@@ -18,7 +18,6 @@ from re_utils.ixc import custom_interleav_wrap
 
 ## DEBUG
 from test import *
-from functools import partial
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 

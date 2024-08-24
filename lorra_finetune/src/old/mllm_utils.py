@@ -116,13 +116,13 @@ def custom_interleav_wrap(self, img_list, text_list, image_nums, padding='right'
             if padding == 'right':
                 # Right padding
                 final_input.append(torch.cat([temp_embeds[idx], pad_emb.repeat(1, temp_max_len-temp_len, 1)], dim=1))
-                final_atts.append(torch.cat([torch.ones(1, temp_len), torch.zeros(1, temp_max_len-temp_len)], dim=1).to(wrap_atts.dtype).to(self.device))
+                final_atts.append(torch.cat([torch.ones(1, temp_len), torch.zeros(1, temp_max_len-temp_len)], dim=1).to(wrap_target.dtype).to(self.device))
                 final_tars.append(torch.cat([temp_tars[idx], (torch.ones(1, temp_max_len-temp_len)*-100).to(wrap_target.dtype).to(self.device)], dim=1))
                 final_mask.append(torch.cat([temp_im_mask[idx], (torch.zeros(1, temp_max_len-temp_len)).to(wrap_target.dtype).to(self.device)], dim=1))
             elif padding == 'left':
                 # Left padding
                 final_input.append(torch.cat([pad_emb.repeat(1, temp_max_len-temp_len, 1), temp_embeds[idx]], dim=1))
-                final_atts.append(torch.cat([torch.zeros(1, temp_max_len-temp_len), torch.ones(1, temp_len)], dim=1).to(wrap_atts.dtype).to(self.device))
+                final_atts.append(torch.cat([torch.zeros(1, temp_max_len-temp_len), torch.ones(1, temp_len)], dim=1).to(wrap_target.dtype).to(self.device))
                 final_tars.append(torch.cat([(torch.ones(1, temp_max_len-temp_len)*-100).to(wrap_target.dtype).to(self.device), temp_tars[idx]], dim=1))
                 final_mask.append(torch.cat([(torch.zeros(1, temp_max_len-temp_len)).to(wrap_target.dtype).to(self.device), temp_im_mask[idx]], dim=1))
 
