@@ -39,7 +39,7 @@ deepspeed --include=localhost:1 finetune.py \
     --use_lora True \
     --hd_num 18 \
     --output_dir $OUTPUT_DIR \
-    --num_train_epochs 3 \
+    --num_train_epochs 6 \
     --batch_size 2 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
@@ -48,13 +48,19 @@ deepspeed --include=localhost:1 finetune.py \
     --save_strategy "no" \
     --save_steps 5 \
     --save_total_limit 1 \
+    --logging_steps 1 \
     --overwrite_output_dir \
     --learning_rate 1e-4 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
     --lr_scheduler_type "cosine" \
-    --logging_steps 1 \
+    --user_tag '' \
+    --assistant_tag '[/INST]' \
+    --control_template "{type}" \
+    --pos_type 'As a precise assistant solving a vision math problem, extract key information from the image, solve the following math problem, and carefully reason through each step to provide a truthful and accurate solution.' \
+    --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
+    --target_layers "9,10,11,12,13,14,15,16,17,18,19,20,21" \
     --report_to "none" \
     --max_length 1024 \
     --deepspeed ds_config_zero2.json \
