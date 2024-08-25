@@ -2,7 +2,7 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 CUDA_VISIBLE_DEVICES=2
-GPUS_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
+GPUS_PER_NODE=$(echo $GPU | tr ',' '\n' | wc -l)
 echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
 export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"

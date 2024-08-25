@@ -7,7 +7,7 @@ echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
 export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
 # export MODEL="merged/finetune_lora"
-OUTPUT_DIR="output"
+OUTPUT_DIR="math_suffix"
 # export DATA="path of data"
 export DATA="math360kcot.txt"
 
@@ -28,11 +28,9 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 # torchrun $DISTRIBUTED_ARGS finetune.py \
-# torchrun $DISTRIBUTED_ARGS finetune.py \
 deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
-    --given_num True \
     --bf16 True \
     --fix_vit True \
     --fix_sampler True \
@@ -51,7 +49,7 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --save_total_limit 5 \
     --logging_steps 2 \
     --overwrite_output_dir \
-    --learning_rate 1e-4 \
+    --learning_rate 7e-20 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
@@ -62,13 +60,13 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --user_tag '' \
     --assistant_tag '[/INST]' \
     --control_template "{type}" \
-    --template_system "ixc_system" \
+    --template_system "ixc_suffix" \
     --pos_type 'As a precise assistant solving a vision math problem, extract key information from the image, solve the following math problem, and carefully reason through each step to provide a truthful and accurate solution.' \
     --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
-    --target_layers "10,12,14,16,18,20" \
+    --target_layers "11,13,15,17,19,21,23,25" \
     --report_to "wandb" \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
-    --resume_from_checkpoint "${OUTPUT_DIR}/checkpoint-200"
+    --from_checkpoint ${OUTPUT_DIR}
     # --learning_rate 5e-4 \
     

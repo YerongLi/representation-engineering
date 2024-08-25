@@ -48,14 +48,14 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --save_steps 6 \
     --save_total_limit 1 \
     --overwrite_output_dir \
-    --learning_rate 1e-4 \
+    --learning_rate 1e-20 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --max_length 1024 \
+    --max_length 5632 \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
     --user_tag '' \
@@ -68,6 +68,7 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
     --from_checkpoint $OUTPUT_DIR/checkpoint-6
+    # --from_checkpoint $OUTPUT_DIR/checkpoint-6
 
     # --learning_rate 5e-4 \
     
