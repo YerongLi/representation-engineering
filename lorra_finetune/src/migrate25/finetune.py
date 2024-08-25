@@ -227,6 +227,7 @@ class RETrainer(Trainer):
         print(f"Response MIN Length: {self.min_length}")
         # for dataset in eval_dataset:
         #     print(dataset.evaluate())
+
 @dataclass
 class LorraArguments:
     user_tag: str = field(metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
@@ -297,7 +298,7 @@ class TrainingArguments(transformers.TrainingArguments):
     fix_vit: bool = True
     fix_sampler: bool = False
     label_names: List[str] = field(default_factory=lambda: ['samples'])
-
+    from_checkpoint: str = None
 
 @dataclass
 class LoraArguments:
@@ -566,11 +567,12 @@ def train():
         model.vision_proj.requires_grad_(True)
 
     if training_args.use_lora:
-        if hasattr(training_args, 'resume_from_checkpoint') and training_args.resume_from_checkpoint:
+        if hasattr(training_args, 'from_checkpoint') and training_args.from_checkpoint:
             from peft import PeftModel
-            model = PeftModel.from_pretrained(model, training_args.resume_from_checkpoint)
+            model = PeftModel.from_pretrained(model, training_args.from_checkpoint)
             model = model.merge_and_unload()
-            print(f" ==== Model merged successfully from checkpoint: {training_args.resume_from_checkpoint}")
+            print(f" ==== Model merged successfully from checkpoint: {training_args.from_checkpoint}")
+        
         for name, param in model.model.named_parameters():
             param.requires_grad = False
         lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
@@ -611,11 +613,12 @@ def train():
     trainer = Trainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module)
     # # Start trainner
-    model.interleav_wrap = partial(custom_interleav_wrap, model)
-
  #    trainer = RETrainer(
  #        model=model, tokenizer=tokenizer, args=training_args, 
  # lorra_args=lorra_args,lora_args=lora_args,**data_module)
+    
+    model.interleav_wrap = partial(custom_interleav_wrap, model)
+    
     trainer.train()
     trainer.save_state()
 

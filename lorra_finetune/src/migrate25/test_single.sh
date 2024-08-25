@@ -44,8 +44,8 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --evaluation_strategy "no" \
-    --save_strategy "no" \
-    --save_steps 5 \
+    --save_strategy "steps" \
+    --save_steps 6 \
     --save_total_limit 1 \
     --overwrite_output_dir \
     --learning_rate 1e-4 \

@@ -2,7 +2,7 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 GPU=$1
-GPUS_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
+GPUS_PER_NODE=$(echo $GPU | tr ',' '\n' | wc -l)
 echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
 export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
@@ -44,8 +44,8 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --evaluation_strategy "no" \
-    --save_strategy "no" \
-    --save_steps 5 \
+    --save_strategy "steps" \
+    --save_steps 6 \
     --save_total_limit 1 \
     --overwrite_output_dir \
     --learning_rate 1e-4 \
@@ -67,7 +67,7 @@ deepspeed --include localhost:$GPU --master_port $ds_master_port finetune.py \
     --target_layers "10,12,14,16,18,20" \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
-    --resume_from_checkpoint $OUTPUT_DIR
+    --from_checkpoint $OUTPUT_DIR/checkpoint-6
 
     # --learning_rate 5e-4 \
     
