@@ -339,7 +339,6 @@ class DataCollatorForSupervisedDataset:
             orig_s=orig_s,
             pos_s=pos_s,
             neg_s=neg_s,
-            text_input=orig_s,
             data_type=data_type,
         )
 
@@ -351,6 +350,53 @@ class DataCollatorForSupervisedDataset:
 
 
 local_rank = None
+# @dataclass
+# class ModelArguments:
+#     model_name_or_path: Optional[str] = field(default='')
+
+
+# @dataclass
+# class DataArguments:
+#     data_path: str = field(
+#         default='data.txt', metadata={'help': 'Path to the training data.'})
+#     given_num: bool = False
+#     batch_size: int = 4
+#     resolution: int = 560
+#     hd_num: int = 18
+
+
+# @dataclass
+# class TrainingArguments(transformers.TrainingArguments):
+#     cache_dir: Optional[str] = field(default=None)
+#     optim: str = field(default='adamw_torch')
+#     max_length: int = field(
+#         default=8192,
+#         metadata={
+#             'help':
+#             'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
+#         },
+#     )
+#     use_lora: bool = False
+#     fix_vit: bool = True
+#     fix_sampler: bool = False
+#     label_names: List[str] = field(default_factory=lambda: ['samples'])
+
+
+# @dataclass
+# class LoraArguments:
+#     lora_r: int = 64
+#     lora_alpha: int = 64
+#     lora_dropout: float = 0.05
+#     lora_target_modules: List[str] = field(default_factory=lambda: [
+#         'attention.wqkv',
+#         'attention.wo',
+#         'feed_forward.w1',
+#         'feed_forward.w2',
+#         'feed_forward.w3',
+#     ])
+#     lora_weight_path: str = ''
+#     lora_bias: str = 'none'
+
 
 def maybe_zero_3(param):
     if hasattr(param, 'ds_id'):
@@ -417,10 +463,31 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
         trainer._save(output_dir, state_dict=state_dict)
 
 
+@dataclass
+class DataCollatorForSupervisedDataset:
+    """Collate examples for supervised fine-tuning."""
+
+    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        instances = [instance['samples'] for instance in instances]
+        text_input, data_type = tuple(
+            [instance[key] for instance in instances]
+            for key in ('text_input', 'data_type'))
+        if 'image' not in instances[0]:
+            text_input = [instance['text_input'][0] for instance in instances]
+        batch = dict(
+            text_input=text_input,
+            data_type=data_type,
+        )
+        if 'image' in instances[0]:
+            images = [instance['image'] for instance in instances]
+            batch['image'] = images
+
+        return dict(samples=batch)
+
+
 def make_supervised_data_module(
     tokenizer: transformers.PreTrainedTokenizer,
     data_args,
-    lorra_args,
 ) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
 
@@ -450,13 +517,8 @@ def make_supervised_data_module(
             else:
                 if len(line) == 2:
                     ratio = float(line[1])
-                    print(f'ratio is {ratio}' )
                     new_len = int(len(temp) * ratio)
-                    # assert False, f"{ratio} ratio {new_len}"
-                    if ratio == -1:
-                        random.shuffle(temp)
-
-                    elif ratio < 1:
+                    if ratio < 1:
                         temp = random.sample(temp, new_len)
                     elif ratio > 1:
                         ex_temp = []
@@ -465,31 +527,13 @@ def make_supervised_data_module(
                         temp.extend(ex_temp)
             rank0_print(f'Load {len(temp)} samples from {line}')
             train_json[line[0]] = temp
-    # train_dataset = AlpacaSupervisedDataset(
-    #     json_datas=train_json,
-    #     tokenizer=tokenizer,
-    #     num_examples=100,
-    #     batch_size=data_args.batch_size,
-    #     resolution=data_args.resolution,
-    #     hd_num=data_args.hd_num,
-    #     local_rank=local_rank,
-    #     lorra_args=lorra_args
-    # )
-    
-
-
-    train_dataset = AlpacaSupervisedDataset(
-        json_datas=train_json,
-        tokenizer=tokenizer,
-        num_examples=100,
-        lorra_args=lorra_args,
-        batch_size=data_args.batch_size,
-        local_rank=local_rank,
+    train_dataset = Mix_dataset(
+        train_json,
+        data_args.batch_size,
         resolution=data_args.resolution,
-        hd_num=data_args.hd_num
-    )
-
-    print(str(len(train_dataset)) + ' samples is loaded')
+        hd_num=data_args.hd_num,
+        local_rank=local_rank)
+    print(str(len(train_dataset)) + 'samples is loaded')
     eval_dataset = None
 
     data_collator = DataCollatorForSupervisedDataset()
@@ -498,7 +542,6 @@ def make_supervised_data_module(
         eval_dataset=eval_dataset,
         data_collator=data_collator,
     )
-
 
 
 def train():
@@ -581,7 +624,7 @@ def train():
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
         )
-        print(lora_config)
+        # print(lora_config)
 
         # lora_config = LoraConfig(
         #     r=lora_args.lora_r,
@@ -600,13 +643,13 @@ def train():
             model.enable_input_require_grads()
     # Load data
     data_module = make_supervised_data_module(
-        tokenizer=tokenizer, data_args=data_args, lorra_args=lorra_args)
+        tokenizer=tokenizer, data_args=data_args)
     print(transformers.processing_utils.logging.is_progress_bar_enabled())
     transformers.processing_utils.logging.enable_progress_bar()
 
-    # # Start trainner
-    trainer = Trainer(
-        model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    # # # Start trainner
+    # trainer = Trainer(
+    #     model=model, tokenizer=tokenizer, args=training_args, **data_module)
 
     trainer.train()
     trainer.save_state()

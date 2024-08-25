@@ -1,46 +1,31 @@
-# Usage: deepspeed train_lora.py --deepspeed <$PATH_TO_DEEPSPEED_CONFIG>
-
-# Adopted from tatsu-lab@stanford_alpaca. Below is the original copyright:
-#    Copyright 2023 Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-from accelerate.utils import DistributedType
+# This code is based on the revised code from fastchat based on tatsu-lab/stanford_alpaca.
 import gc
-from dataclasses import dataclass, field
-import logging
-import pathlib
-import random
-import typing
-import os
 import json
-import gc
+import random
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
-
-from deepspeed import zero
-from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-import transformers
-from transformers import deepspeed
-from transformers import Trainer
-from transformers import BitsAndBytesConfig
-
-from deepspeed import zero
-from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
-
-# from transformers import deepspeed
 import torch
-import pickle
-from accelerate import dispatch_model
+import transformers
+from accelerate.utils import DistributedType
+from data_mix import Mix_dataset
+from deepspeed import zero
+from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+from peft import LoraConfig, get_peft_model
+from transformers import Trainer, deepspeed
+from transformers.trainer_pt_utils import LabelSmoother
+
+from functools import partial
+from re_utils.ixc import custom_interleav_wrap
+
+IGNORE_TOKEN_ID = LabelSmoother.ignore_index
+
+from re_utils.data_mix import AlpacaSupervisedDataset
+from functools import partial
+# from mllm_utils import custom_interleav_wrap
+# from mllm_utils import custom_forward
+# from mllm_utils import check_right_padding_with_embeddings
+# from mllm_utils import check_left_padding_with_embeddings
+# from math_utils import ChartQA
 
 from args import (
     ModelArguments,
@@ -48,198 +33,6 @@ from args import (
     LoraArguments, 
     LorraArguments,
 )
-# from finetune.data_mix import Mix_dataset
-from mllm_data_utils import AlpacaSupervisedDataset
-from functools import partial
-# from mllm_utils import custom_interleav_wrap
-# from mllm_utils import custom_forward
-# from mllm_utils import check_right_padding_with_embeddings
-# from mllm_utils import check_left_padding_with_embeddings
-from math_utils import ChartQA
-
-
-@dataclass
-class LorraArguments:
-    user_tag: str = field(metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
-    assistant_tag: str = field(metadata={"help": "Assistant tag for chat models (eg: `ASSISTANT:` or `[\INST]`)"})
-    pos_type: str = field(metadata={"help": "Concept/Function to be optimized towards (eg: 'a truthful')"})
-    neg_type: str = field(metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"})
-    target_layers: str = field(metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
-    control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
-    lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
-    lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
-    query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
-    response_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
-
-
-@dataclass
-class TrainingArguments(TrainingArguments):
-    cache_dir: Optional[str] = field(default=None)
-    optim: str = field(default='adamw_torch')
-    max_length: int = field(
-        default=8192,
-        metadata={
-            'help':
-            'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
-        },
-    )
-    use_lora: bool = False
-    fix_vit: bool = True
-    fix_sampler: bool = False
-    label_names: List[str] = field(default_factory=lambda: ['samples'])
-@dataclass
-class DataArguments:
-    data_path: str = field(
-        default='data.txt', metadata={'help': 'Path to the training data.'})
-    given_num: bool = False
-    batch_size: int = 7
-    resolution: int = 560
-    hd_num: int = 18
-class DataCollatorForSupervisedDataset:
-    """Collate examples for supervised fine-tuning."""
-
-    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        instances = [instance['samples'] for instance in instances]
-        # for i, instance in enumerate(instances):
-        #     print('====== Instance {} ======'.format(i+1))
-        #     for key in instance.keys():
-        #         print(key)
-        #     print('=========================')
-
-        
-        # text_input, data_type = tuple(
-        #     [instance[key] for instance in instances]
-        #     for key in ('text_input', 'data_type'))
-        orig_s, pos_s, neg_s, data_type = tuple(
-            [instance[key] for instance in instances]
-            for key in ('orig_s', 'pos_s', 'neg_s', 'data_type')
-        )
-
-        # Image always exists
-        # if 'image' not in instances[0]:
-        #     text_input = [instance['text_input'][0] for instance in instances]
-        
-        batch = dict(
-            orig_s=orig_s,
-            pos_s=pos_s,
-            neg_s=neg_s,
-            data_type=data_type,
-        )
-
-        if 'image' in instances[0]:
-            images = [instance['image'] for instance in instances]
-            batch['image'] = images
-
-        return dict(samples=batch)
-
-
-local_rank = None
-
-
-def rank0_print(*args):
-    if local_rank == 0:
-        print(*args)
-
-def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
-                                   output_dir: str,
-                                   bias='none'):
-    """Collects the state dict and dump to disk."""
-    # check if zero3 mode enabled
-    if deepspeed.is_deepspeed_zero3_enabled():
-        state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
-        )
-    else:
-        if trainer.args.use_lora:
-            state_dict = get_peft_state_maybe_zero_3(
-                trainer.model.named_parameters(), bias)
-        else:
-            state_dict = trainer.model.state_dict()
-    if trainer.args.should_save and trainer.args.local_rank == 0:
-        trainer._save(output_dir, state_dict=state_dict)
-
-
-def make_supervised_data_module(
-    tokenizer: transformers.PreTrainedTokenizer,
-    data_args,
-    lorra_args,
-) -> Dict:
-    """Make dataset and collator for supervised fine-tuning."""
-
-    rank0_print('Loading data...')
-    if data_args.data_path.endswith('json'):
-        train_json = json.load(open(data_args.data_path))
-    elif data_args.data_path.endswith('txt'):
-        train_json = {}
-        with open(data_args.data_path) as f:
-            lines = f.readlines()
-
-        for line in lines:
-            line = line.strip()
-            line = line.split(' ')
-            with open(line[0]) as f:
-                temp = json.load(f)
-            if data_args.given_num:
-                assert len(line) == 2
-                num = int(float(line[1]) * 20000)
-                if len(temp) > num:
-                    temp = random.sample(temp, num)
-                else:
-                    ex_temp = []
-                    for i in range(num - len(temp)):
-                        ex_temp.append(random.choice(temp))
-                    temp.extend(ex_temp)
-            else:
-                if len(line) == 2:
-                    ratio = float(line[1])
-                    print(f'ratio is {ratio}' )
-                    new_len = int(len(temp) * ratio)
-                    # assert False, f"{ratio} ratio {new_len}"
-                    if ratio == -1:
-                        random.shuffle(temp)
-
-                    elif ratio < 1:
-                        temp = random.sample(temp, new_len)
-                    elif ratio > 1:
-                        ex_temp = []
-                        for i in range(new_len - len(temp)):
-                            ex_temp.append(random.choice(temp))
-                        temp.extend(ex_temp)
-            rank0_print(f'Load {len(temp)} samples from {line}')
-            train_json[line[0]] = temp
-    # train_dataset = AlpacaSupervisedDataset(
-    #     json_datas=train_json,
-    #     tokenizer=tokenizer,
-    #     num_examples=100,
-    #     batch_size=data_args.batch_size,
-    #     resolution=data_args.resolution,
-    #     hd_num=data_args.hd_num,
-    #     local_rank=local_rank,
-    #     lorra_args=lorra_args
-    # )
-    
-
-
-    train_dataset = AlpacaSupervisedDataset(
-        json_datas=train_json,
-        tokenizer=tokenizer,
-        num_examples=100,
-        lorra_args=lorra_args,
-        batch_size=data_args.batch_size,
-        local_rank=local_rank,
-        resolution=data_args.resolution,
-        hd_num=data_args.hd_num
-    )
-
-    print(str(len(train_dataset)) + ' samples is loaded')
-    eval_dataset = [ChartQA()]
-
-    data_collator = DataCollatorForSupervisedDataset()
-    return dict(
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=data_collator,
-    )
-
 
 class RETrainer(Trainer):
     def __init__(self, *args, lorra_args=None,lora_args=None, **kwargs):
@@ -270,7 +63,7 @@ class RETrainer(Trainer):
             pos_s = samples['pos_s']
             neg_s = samples['neg_s']
             
-            # Print the elements
+            ## Print the elements
             # print(f"==== orig_s[0][0]: {orig_s[0][0]} ====")
             # print(f"==== pos_s[0][0]: {pos_s[0][0]} ====")
             # print(f"==== neg_s[0][0]: {neg_s[0][0]} ====")
@@ -428,37 +221,142 @@ class RETrainer(Trainer):
         
     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
         # print(eval_dataset)
-        print(self.args.output_dir)
+        print('\n\n', self.args.output_dir)
         print(f"Query Max Length: {self.lorra_args.query_max_len}")
         print(f"Response Max Length: {self.lorra_args.response_max_len}")
         print(f"Response MIN Length: {self.min_length}")
         # for dataset in eval_dataset:
         #     print(dataset.evaluate())
+@dataclass
+class LorraArguments:
+    user_tag: str = field(metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
+    assistant_tag: str = field(metadata={"help": "Assistant tag for chat models (eg: `ASSISTANT:` or `[\INST]`)"})
+    pos_type: str = field(metadata={"help": "Concept/Function to be optimized towards (eg: 'a truthful')"})
+    neg_type: str = field(metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"})
+    target_layers: str = field(metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
+    control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
+    template_system: str = field(metadata={"help": "template system, i.e. ixc_system, ixc_suffix etc."})
+    lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    response_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    
 
-    # def save_model(self, output_dir: str = None, _internal_call: bool = False):
-    #     """
-    #     Override the save_model method to use safe_save_model_for_hf_trainer and record the step.
-    #     Save the model in a directory named with the current step.
-    #     """
-    #     # Ensure output_dir is set
-    #     output_dir = output_dir if output_dir is not None else self.args.output_dir
+
+# @dataclass
+# class TrainingArguments(transformers.TrainingArguments):
+#     cache_dir: Optional[str] = field(default=None)
+#     optim: str = field(default='adamw_torch')
+#     max_length: int = field(
+#         default=8192,
+#         metadata={
+#             'help':
+#             'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
+#         },
+#     )
+#     use_lora: bool = False
+#     fix_vit: bool = True
+#     fix_sampler: bool = False
+#     label_names: List[str] = field(default_factory=lambda: ['samples'])
+# @dataclass
+# class DataArguments:
+#     data_path: str = field(
+#         default='data.txt', metadata={'help': 'Path to the training data.'})
+#     given_num: bool = False
+#     batch_size: int = 7
+#     resolution: int = 560
+#     hd_num: int = 18
+
+# @dataclass
+# class ModelArguments:
+#     model_name_or_path: Optional[str] = field(default='')
+
+
+@dataclass
+class DataArguments:
+    data_path: str = field(
+        default='data.txt', metadata={'help': 'Path to the training data.'})
+    given_num: bool = False
+    batch_size: int = 4
+    resolution: int = 560
+    hd_num: int = 18
+
+
+@dataclass
+class TrainingArguments(transformers.TrainingArguments):
+    cache_dir: Optional[str] = field(default=None)
+    optim: str = field(default='adamw_torch')
+    max_length: int = field(
+        default=8192,
+        metadata={
+            'help':
+            'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
+        },
+    )
+    use_lora: bool = False
+    fix_vit: bool = True
+    fix_sampler: bool = False
+    label_names: List[str] = field(default_factory=lambda: ['samples'])
+
+
+@dataclass
+class LoraArguments:
+    lora_r: int = 64
+    lora_alpha: int = 64
+    lora_dropout: float = 0.05
+    lora_target_modules: List[str] = field(default_factory=lambda: [
+        'attention.wqkv',
+        'attention.wo',
+        'feed_forward.w1',
+        'feed_forward.w2',
+        'feed_forward.w3',
+    ])
+    lora_weight_path: str = ''
+    lora_bias: str = 'none'
+
+class DataCollatorForSupervisedDataset:
+    """Collate examples for supervised fine-tuning."""
+
+    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        instances = [instance['samples'] for instance in instances]
+        # for i, instance in enumerate(instances):
+        #     print('====== Instance {} ======'.format(i+1))
+        #     for key in instance.keys():
+        #         print(key)
+        #     print('=========================')
+
         
-    #     self.save_state()
+        # text_input, data_type = tuple(
+        #     [instance[key] for instance in instances]
+        #     for key in ('text_input', 'data_type'))
+        orig_s, pos_s, neg_s, data_type = tuple(
+            [instance[key] for instance in instances]
+            for key in ('orig_s', 'pos_s', 'neg_s', 'data_type')
+        )
+
+        # Image always exists
+        # if 'image' not in instances[0]:
+        #     text_input = [instance['text_input'][0] for instance in instances]
         
-    #     # Record the current step
-    #     step = self.state.global_step
+        batch = dict(
+            orig_s=orig_s,
+            pos_s=pos_s,
+            neg_s=neg_s,
+            text_input=orig_s,
+            data_type=data_type,
+        )
 
-    #     # Create a directory with the step number appended
-    #     step_output_dir = os.path.join(output_dir, f"checkpoint-{step}")
+        if 'image' in instances[0]:
+            images = [instance['image'] for instance in instances]
+            batch['image'] = images
 
-    #     # Use the provided safe_save_model_for_hf_trainer function to save the model
-    #     safe_save_model_for_hf_trainer(self, output_dir, self.lora_args.lora_bias)
+        return dict(samples=batch)
 
-    #     # # Call the original save_model method to handle any additional logic
-    #     # super().save_model(step_output_dir, _internal_call=_internal_call)
-        
+
+local_rank = None
+
 def maybe_zero_3(param):
-    if hasattr(param, "ds_id"):
+    if hasattr(param, 'ds_id'):
         assert param.ds_status == ZeroParamStatus.NOT_AVAILABLE
         with zero.GatheredParameters([param]):
             param = param.data.detach().cpu().clone()
@@ -469,20 +367,23 @@ def maybe_zero_3(param):
 
 # Borrowed from peft.utils.get_peft_model_state_dict
 def get_peft_state_maybe_zero_3(named_params, bias):
-    if bias == "none":
-        to_return = {k: t for k, t in named_params if "lora_" in k}
-    elif bias == "all":
-        to_return = {k: t for k, t in named_params if "lora_" in k or "bias" in k}
-    elif bias == "lora_only":
+    if bias == 'none':
+        to_return = {k: t for k, t in named_params if 'lora_' in k}
+    elif bias == 'all':
+        to_return = {
+            k: t
+            for k, t in named_params if 'lora_' in k or 'bias' in k
+        }
+    elif bias == 'lora_only':
         to_return = {}
         maybe_lora_bias = {}
         lora_bias_names = set()
         for k, t in named_params:
-            if "lora_" in k:
+            if 'lora_' in k:
                 to_return[k] = t
-                bias_name = k.split("lora_")[0] + "bias"
+                bias_name = k.split('lora_')[0] + 'bias'
                 lora_bias_names.add(bias_name)
-            elif "bias" in k:
+            elif 'bias' in k:
                 maybe_lora_bias[k] = t
         for k, t in maybe_lora_bias:
             if bias_name in lora_bias_names:
@@ -491,6 +392,117 @@ def get_peft_state_maybe_zero_3(named_params, bias):
         raise NotImplementedError
     to_return = {k: maybe_zero_3(v) for k, v in to_return.items()}
     return to_return
+
+
+local_rank = None
+
+
+def rank0_print(*args):
+    if local_rank == 0:
+        print(*args)
+
+
+def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
+                                   output_dir: str,
+                                   bias='none'):
+    """Collects the state dict and dump to disk."""
+    # check if zero3 mode enabled
+    if deepspeed.is_deepspeed_zero3_enabled():
+        state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
+        )
+    else:
+        if trainer.args.use_lora:
+            state_dict = get_peft_state_maybe_zero_3(
+                trainer.model.named_parameters(), bias)
+        else:
+            state_dict = trainer.model.state_dict()
+    if trainer.args.should_save and trainer.args.local_rank == 0:
+        trainer._save(output_dir, state_dict=state_dict)
+
+
+def make_supervised_data_module(
+    tokenizer: transformers.PreTrainedTokenizer,
+    data_args,
+    lorra_args,
+) -> Dict:
+    """Make dataset and collator for supervised fine-tuning."""
+
+    rank0_print('Loading data...')
+    if data_args.data_path.endswith('json'):
+        train_json = json.load(open(data_args.data_path))
+    elif data_args.data_path.endswith('txt'):
+        train_json = {}
+        with open(data_args.data_path) as f:
+            lines = f.readlines()
+
+        for line in lines:
+            line = line.strip()
+            line = line.split(' ')
+            with open(line[0]) as f:
+                temp = json.load(f)
+            if data_args.given_num:
+                assert len(line) == 2
+                num = int(float(line[1]) * 1000)
+                if len(temp) > num:
+                    temp = random.sample(temp, num)
+                else:
+                    ex_temp = []
+                    for i in range(num - len(temp)):
+                        ex_temp.append(random.choice(temp))
+                    temp.extend(ex_temp)
+            else:
+                if len(line) == 2:
+                    ratio = float(line[1])
+                    print(f'ratio is {ratio}' )
+                    new_len = int(len(temp) * ratio)
+                    # assert False, f"{ratio} ratio {new_len}"
+                    if ratio == -1:
+                        random.shuffle(temp)
+
+                    elif ratio < 1:
+                        temp = random.sample(temp, new_len)
+                    elif ratio > 1:
+                        ex_temp = []
+                        for i in range(new_len - len(temp)):
+                            ex_temp.append(random.choice(temp))
+                        temp.extend(ex_temp)
+            rank0_print(f'Load {len(temp)} samples from {line}')
+            train_json[line[0]] = temp
+    # train_dataset = AlpacaSupervisedDataset(
+    #     json_datas=train_json,
+    #     tokenizer=tokenizer,
+    #     num_examples=100,
+    #     batch_size=data_args.batch_size,
+    #     resolution=data_args.resolution,
+    #     hd_num=data_args.hd_num,
+    #     local_rank=local_rank,
+    #     lorra_args=lorra_args
+    # )
+    
+
+
+    train_dataset = AlpacaSupervisedDataset(
+        json_datas=train_json,
+        tokenizer=tokenizer,
+        num_examples=100,
+        lorra_args=lorra_args,
+        batch_size=data_args.batch_size,
+        local_rank=local_rank,
+        resolution=data_args.resolution,
+        hd_num=data_args.hd_num
+    )
+
+    print(str(len(train_dataset)) + ' samples is loaded')
+    eval_dataset = None
+
+    data_collator = DataCollatorForSupervisedDataset()
+    return dict(
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=data_collator,
+    )
+
+
 
 def train():
     global local_rank
@@ -511,19 +523,6 @@ def train():
     local_rank = training_args.local_rank
 
     device_map = None
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=training_args.cache_dir,
-        padding_side='right',
-        use_fast=False,
-        trust_remote_code=True,
-    )
-
-    # Load data
-    data_module = make_supervised_data_module(
-        tokenizer=tokenizer, data_args=data_args, lorra_args=lorra_args)
-    print(transformers.processing_utils.logging.is_progress_bar_enabled())
-    transformers.processing_utils.logging.enable_progress_bar()
 
     # Set RoPE scaling factor
     config = transformers.AutoConfig.from_pretrained(
@@ -536,7 +535,6 @@ def train():
 
     # Load model and tokenizer
     print(f'Load model from: {model_args.model_name_or_path}')
-
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         config=config,
@@ -544,33 +542,16 @@ def train():
         device_map=device_map,
         trust_remote_code=True,
     )
-    # if training_args.resume_from_checkpoint:
-    #     # adapter_weights = torch.load(f"{training_args.resume_from_checkpoint}/adapter_model.bin")
-        
-    #     # Merge the adapter weights with the base model
-    #     from peft import PeftModel    
-        
-    #     model = PeftModel.from_pretrained(model, training_args.resume_from_checkpoint)
-    #     model = model.merge_and_unload()
-        
-    #     # Verify that the model has loaded the weights
-    #     print(f"Model successfully loaded with finetuned weights from checkpoint: {training_args.resume_from_checkpoint}")
+    model.interleav_wrap = partial(custom_interleav_wrap, model)
 
-
-
-
-
-
-
-
-    # model.tokenizer = tokenizer
-    # # model.interleav_wrap = partial(custom_interleav_wrap, model)
-    # # model.assistant_tag = lorra_args.assistant_tag
-    # # model.query_max_len = 1536
-    # # model.response_max_len = 2000
-    # # model.forward = partial(custom_forward, model)
-    # model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
-    # model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        padding_side='right',
+        use_fast=False,
+        trust_remote_code=True,
+    )
+    model.tokenizer = tokenizer
 
     if training_args.fix_vit:
         model.vit.requires_grad_(False)
@@ -598,67 +579,51 @@ def train():
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
-            # layers_to_transform=lora_layers_to_transform,
+            layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
         )
+        print(lora_config)
 
-        # lorra_target_layers = [10,12,14,16,18,20] # target representations
-        # lora_layers_to_transform = list(range(lorra_target_layers[-1] + 1)) # LoRA layers
         # lora_config = LoraConfig(
         #     r=lora_args.lora_r,
         #     lora_alpha=lora_args.lora_alpha,
         #     target_modules=lora_args.lora_target_modules,
-        #     layers_to_transform=lora_layers_to_transform,
+        #     # layers_to_transform=lora_layers_to_transform,
         #     lora_dropout=lora_args.lora_dropout,
         #     bias=lora_args.lora_bias,
         #     task_type='CAUSAL_LM',
         # )
-
 
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
 
         if training_args.gradient_checkpointing:
             model.enable_input_require_grads()
-    model.tokenizer = tokenizer
-    model.interleav_wrap = partial(custom_interleav_wrap, model)
-    # model.assistant_tag = lorra_args.assistant_tag
-    # model.query_max_len = 1536
-    # model.response_max_len = 2000
-    model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
-    model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
+    # Load data
+    data_module = make_supervised_data_module(
+        tokenizer=tokenizer, data_args=data_args, lorra_args=lorra_args)
+    print(transformers.processing_utils.logging.is_progress_bar_enabled())
+    transformers.processing_utils.logging.enable_progress_bar()
 
-
-
-    lorra_target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
+    # # Start trainner
+    # trainer = Trainer(
+    #     model=model, tokenizer=tokenizer, args=training_args, **data_module)
     # Start trainner
+    model.interleav_wrap = partial(custom_interleav_wrap, model)
+
     trainer = RETrainer(
         model=model, tokenizer=tokenizer, args=training_args, 
  lorra_args=lorra_args,lora_args=lora_args,**data_module)
-
     trainer.train()
     trainer.save_state()
-    safe_save_model_for_hf_trainer(trainer, training_args.output_dir, trainer.lora_args.lora_bias)
-    
-    import time
-    def countdown(t):
-        while t:
-            mins, secs = divmod(t, 60)
-            timer = 'TRAINER finished {:02d}:{:02d}'.format(mins, secs)
-            print(timer, end="\r")
-            time.sleep(1)
-            t -= 1
-        print('Countdown Over!')
 
-    # Start countdown for 5 minutes (or 300 seconds)
-    countdown(300)
-    # safe_save_model_for_hf_trainer(
-    #     trainer=trainer,
-    #     output_dir=training_args.output_dir,
-    #     bias=lora_args.lora_bias)
+    safe_save_model_for_hf_trainer(
+        trainer=trainer,
+        output_dir=training_args.output_dir,
+        bias=lora_args.lora_bias)
 
-    
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     train()
