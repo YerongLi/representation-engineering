@@ -232,7 +232,7 @@ class RETrainer(Trainer):
 
                 q_to_regress_embeds = [None, None, None]
                 q_attention_mask = [None, None, None]
-                q_targets = [None, None, None]
+                # q_targets = [None, None, None]
                 q_im_mask = [None, None, None]
                 
     
@@ -241,27 +241,29 @@ class RETrainer(Trainer):
                     # print('=== forward ===')
                     # print(len(image))
                     # print(image[0].shape)
-                    q_to_regress_embeds[i], q_attention_mask[i], q_targets[i], q_im_mask[i] = model.interleav_wrap(
+                    q_to_regress_embeds[i], q_attention_mask[i], _ , q_im_mask[i] = model.interleav_wrap(
                         image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], 'right', set_length=self.lorra_args.query_max_len
                     )
+                    q_im_mask[i] = q_im_mask[i].bool()
     
                 # Initialize the lists to store the outputs
                 r_to_regress_embeds = [None, None, None]
                 r_attention_mask = [None, None, None]
-                r_targets = [None, None, None]
+                # r_targets = [None, None, None]
                 r_im_mask = [None, None, None]
                 # Loop through the input strings and store the outputs
                 for i, input_str in enumerate([orig_s, pos_s, neg_s]):
                     if i == 0:
-                        r_to_regress_embeds[0], r_attention_mask[0], r_targets[0], r_im_mask[0] = model.interleav_wrap(
+                        r_to_regress_embeds[0], r_attention_mask[0], _ , r_im_mask[0] = model.interleav_wrap(
                             image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], 'left', set_length=self.lorra_args.response_max_len
                         )
                     else:
                         r_to_regress_embeds[i] = r_to_regress_embeds[0]
                         r_attention_mask[i] = r_attention_mask[0]
-                        r_targets[i] = r_targets[0]
+                        # r_targets[i] = r_targets[0]
                         r_im_mask[i] = r_im_mask[0]
     
+                    r_im_mask[i] = r_im_mask[i].bool()
     
                 # Assuming that q_to_regress_embeds and r_to_regress_embeds have been populated as per the previous logic
                 
@@ -371,7 +373,7 @@ class RETrainer(Trainer):
         
     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
         # print(eval_dataset)
-        print(self.args.output_dir)
+        print('\n\n',self.args.output_dir)
         print(f"Query Max Length: {self.lorra_args.query_max_len}")
         print(f"Response Max Length: {self.lorra_args.response_max_len}")
         print(f"Response MIN Length: {self.min_length}")
@@ -404,7 +406,7 @@ class DataCollatorForSupervisedDataset:
         
         batch = dict(
             orig_s=orig_s,
-            text_input=orig_s,
+            # text_input=orig_s,
             pos_s=pos_s,
             neg_s=neg_s,
             data_type=data_type,
@@ -594,11 +596,11 @@ def train():
     transformers.processing_utils.logging.enable_progress_bar()
 
     # Start trainner
-    trainer = Trainer(
-        model=model, tokenizer=tokenizer, args=training_args, **data_module)
- #    trainer = RETrainer(
- #        model=model, tokenizer=tokenizer, args=training_args, 
- # lorra_args=lorra_args,lora_args=lora_args,**data_module)
+    # trainer = Trainer(
+    #     model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    trainer = RETrainer(
+        model=model, tokenizer=tokenizer, args=training_args, 
+ lorra_args=lorra_args,lora_args=lora_args,**data_module)
     trainer.train()
     trainer.save_state()
 
