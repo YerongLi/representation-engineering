@@ -271,6 +271,7 @@ class AlpacaSupervisedDataset(Mix_dataset):
                     hd_num=hd_num
                 )
         # if len(self.datasets_multi) == 0 and len(self.datasets_text) == 0:
+        # Only iteratre over datasets with images
         for proto in (self.datasets_multi, self.datasets_text):
             for ds in proto:
                 conversations = [ds.text_processor(ds.raw_data[i]['conversations']) for i in range(len(ds.raw_data))]
@@ -290,6 +291,14 @@ class AlpacaSupervisedDataset(Mix_dataset):
                                                             lorra_args.control_template,
                                                             lorra_args.template_system,
                                                             )
+                print("===== Original String (ds.orig_s[0]) =====")
+                print(ds.orig_s[0])
+                
+                print("===== Positive String (ds.pos_s[0]) =====")
+                print(ds.pos_s[0])
+                
+                print("===== Negative String (ds.neg_s[0]) =====")
+                print(ds.neg_s[0])
                 # del ds.raw_data
             
         # self.max_res_len = lorra_args.max_res_len

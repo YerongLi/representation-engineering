@@ -579,7 +579,7 @@ def train():
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
-            layers_to_transform=lora_layers_to_transform,
+            # layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
@@ -608,14 +608,14 @@ def train():
     transformers.processing_utils.logging.enable_progress_bar()
 
     # # Start trainner
-    # trainer = Trainer(
-    #     model=model, tokenizer=tokenizer, args=training_args, **data_module)
-    # Start trainner
+    trainer = Trainer(
+        model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    # # Start trainner
     model.interleav_wrap = partial(custom_interleav_wrap, model)
 
-    trainer = RETrainer(
-        model=model, tokenizer=tokenizer, args=training_args, 
- lorra_args=lorra_args,lora_args=lora_args,**data_module)
+ #    trainer = RETrainer(
+ #        model=model, tokenizer=tokenizer, args=training_args, 
+ # lorra_args=lorra_args,lora_args=lora_args,**data_module)
     trainer.train()
     trainer.save_state()
 
