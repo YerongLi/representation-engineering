@@ -41,7 +41,7 @@ for i, entry in enumerate(data):
         new_entry = {
             "id": int(entry['id'].split('_')[1]),  # Convert 'identity_X' to integer X
             "conversations": conversations,
-            "image": [f"/home/yerong2/data/MathV360K/data_images/{entry['image']}"]
+            "image": [f"{datasets_path}/MathV360K/data_images/{entry['image']}"]
         }
         new_data.append(new_entry)
         dataset_counts[dataset_name] += 1
@@ -96,7 +96,7 @@ for i, entry in enumerate(data):
         new_entry = {
             "id": int(entry['id'].split('_')[1]),  # Convert 'identity_X' to integer X
             "conversations": conversations,
-            "image": [f"/home/yerong2/data/MathV360K/data_images/{entry['image']}"]
+            "image": [f"{datasets_path}/MathV360K/data_images/{entry['image']}"]
         }
         new_data.append(new_entry)
         dataset_counts[dataset_name] += 1
