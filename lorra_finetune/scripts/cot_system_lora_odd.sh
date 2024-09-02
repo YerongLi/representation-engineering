@@ -37,8 +37,8 @@ deepspeed --master_port $ds_master_port --include localhost:$GPU src/mllm_lorra.
     --fix_sampler True \
     --use_lora True \
     --output_dir $OUTPUT_DIR \
-    --max_steps 200 \
-    --lora_r 8 \
+    --max_steps 600 \
+    --lora_r 64 \
     --batch_size 1 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
@@ -49,11 +49,11 @@ deepspeed --master_port $ds_master_port --include localhost:$GPU src/mllm_lorra.
     --eval_steps 10 \
     --logging_steps 1 \
     --save_total_limit 5 \
-    --learning_rate 2e-4 \
+    --learning_rate 2e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
-    --lr_scheduler_type "inverse_sqrt" \
+    --lr_scheduler_type "cosine" \
     --report_to "wandb" \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \

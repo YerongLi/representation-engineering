@@ -11,6 +11,8 @@ import transformers
 from accelerate.utils import DistributedType
 from re_utils.data_mix import AlpacaSupervisedDataset
 from re_utils.ixc import custom_interleav_wrap
+from re_utils.ixc import check_right_padding_with_embeddings
+from re_utils.ixc import check_left_padding_with_embeddings
 from deepspeed import zero
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 from peft import LoraConfig, get_peft_model
@@ -36,7 +38,7 @@ class LorraArguments:
     target_layers: str = field(metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
     control_template: str = field(metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
     template_system: str = field(metadata={"help": "template system, i.e. ixc_system, ixc_suffix etc."})
-    lorra_alpha: float = field(default=5, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    lorra_alpha: float = field(default=16, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
     lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
     query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
     response_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
@@ -111,7 +113,12 @@ class LoraArguments:
         'feed_forward.w1',
         'feed_forward.w2',
         'feed_forward.w3',
+        'q_proj', 
+        'v_proj',
     ])
+    # lora_target_modules: typing.List[str] = field(
+    #     default_factory=lambda: ["q_proj", "v_proj"]
+    # )
     lora_weight_path: str = ''
     lora_bias: str = 'none'
 
@@ -187,6 +194,7 @@ class RETrainer(Trainer):
         self.target_layers = [int(layer) for layer in lorra_args.target_layers.split(",")] # target representations
         self.lorra_args = lorra_args
         self.lora_args = lora_args
+        self.min_length = self.lorra_args.response_max_len
         
     def compute_loss(self, model, inputs, return_outputs=False):
         """
@@ -196,6 +204,11 @@ class RETrainer(Trainer):
         Subclass and override for custom behavior.
         """
         samples = inputs.get('samples', None)
+        # print(' ====== token_ids ==== ')
+        # Print the pad_token and eos_token
+        # print(f"Pad token: {self.tokenizer.pad_token}, Pad token ID: {self.tokenizer.pad_token_id}")
+        # print(f"EOS token: {self.tokenizer.eos_token}, EOS token ID: {self.tokenizer.eos_token_id}")
+
         if samples:
             infer_mode = samples.get('infer_mode', 'base')
             if samples['data_type'][0] == 'text':
@@ -217,7 +230,7 @@ class RETrainer(Trainer):
             # print(Yerong)
             if has_img:
                 image = samples['image']
-                bs = len(samples['orig_s'][0])
+                # bs = len(samples['orig_s'][0])
                 # assert len(samples['orig_s']) == 1, 'self.per_device_train_batch_size'
                 image_nums = []
                 temp_image = []
@@ -234,43 +247,69 @@ class RETrainer(Trainer):
                 q_attention_mask = [None, None, None]
                 # q_targets = [None, None, None]
                 q_im_mask = [None, None, None]
-                
-    
-                
+
+
+                '''
+                Question embeddings
+                Iterate over orig_s, pos_s, and neg_s, and for each one, store the input embeddings, attention masks, 
+                and image masks in the corresponding index (0 for orig_s, 1 for pos_s, 2 for neg_s) of the lists q_to_regress_embeds, q_attention_mask, and q_im_mask.
+
+                Text input of interleav_wrap should be 1 x 1 because 2.0 only support bsppu=1, bs = 1
+                '''
                 for i, input_str in enumerate([orig_s, pos_s, neg_s]):
-                    # print('=== forward ===')
-                    # print(len(image))
-                    # print(image[0].shape)
                     q_to_regress_embeds[i], q_attention_mask[i], _ , q_im_mask[i] = model.interleav_wrap(
-                        image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], 'right', set_length=self.lorra_args.query_max_len
+                        image, [[e.split(self.assistant_tag)[0] for e in input_str[0]]], padding_side='right', set_length=self.lorra_args.query_max_len
                     )
                     q_im_mask[i] = q_im_mask[i].bool()
-    
+
+
+                    self.model.check_right_padding_with_embeddings(q_to_regress_embeds[i],  q_attention_mask[i])
+                
                 # Initialize the lists to store the outputs
                 r_to_regress_embeds = [None, None, None]
                 r_attention_mask = [None, None, None]
                 # r_targets = [None, None, None]
                 r_im_mask = [None, None, None]
-                # Loop through the input strings and store the outputs
+   
+
+                '''
+                Answer embeddings
+                Iterate over orig_s, pos_s, and neg_s, and for each one, store the input embeddings, attention masks, 
+                and image masks in the corresponding index (0 for orig_s, 1 for pos_s, 2 for neg_s) of the lists q_to_regress_embeds, q_attention_mask, and q_im_mask.
+
+                Text input of interleav_wrap should be 1 x 1 because 2.0 only support bsppu=1, bs = 1
+
+                These three embeddings are the same for orig_s pos_s and neg_s so we only have to compute once to orig_s
+                '''
                 for i, input_str in enumerate([orig_s, pos_s, neg_s]):
                     if i == 0:
                         r_to_regress_embeds[0], r_attention_mask[0], _ , r_im_mask[0] = model.interleav_wrap(
-                            image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], 'left', set_length=self.lorra_args.response_max_len
+                            image, [[e.split(self.assistant_tag)[1] for e in input_str[0]]], padding_side='left', set_length=self.lorra_args.response_max_len
                         )
                     else:
+                        '''
                         r_to_regress_embeds[i] = r_to_regress_embeds[0]
                         r_attention_mask[i] = r_attention_mask[0]
                         # r_targets[i] = r_targets[0]
                         r_im_mask[i] = r_im_mask[0]
+                        '''
+                        r_to_regress_embeds[i] = r_to_regress_embeds[0].clone()
+                        r_attention_mask[i] = r_attention_mask[0].clone()
+                        # r_targets[i] = r_targets[0].clone() 
+                        r_im_mask[i] = r_im_mask[0].clone()
     
                     r_im_mask[i] = r_im_mask[i].bool()
-    
+                    self.model.check_left_padding_with_embeddings(r_to_regress_embeds[i],  r_attention_mask[i])
+
+
+                
                 # Assuming that q_to_regress_embeds and r_to_regress_embeds have been populated as per the previous logic
                 
                 to_regress_embeds = [
                     torch.cat((q_to_regress_embeds[i], r_to_regress_embeds[i]), dim=1)
                     for i in range(3)
                 ]
+
                 
                 
                 # Concatenate q_attention_mask and r_attention_mask
@@ -278,7 +317,7 @@ class RETrainer(Trainer):
                     torch.cat((q_attention_mask[i], r_attention_mask[i]), dim=1)
                     for i in range(3)
                 ]
-                
+
     
                 # Concatenate q_targets and r_targets
                 # to_targets = [
@@ -292,8 +331,15 @@ class RETrainer(Trainer):
                     torch.cat((q_im_mask[i], r_im_mask[i]), dim=1).bool()
                     for i in range(3)
                 ]
+
+
+                # print('=====    Shapes   ===== ')
+                # print(to_regress_embeds[0].shape) # Verified
+                # print(to_attention_mask[0].shape) # Verified
+                # print(to_im_mask[0].shape)        # Verified
+                # print(Yerong)
                 module = 'past_key_values' # 'hidden_states
-                alpha = 16
+                # alpha = 16
                 with model.disable_adapter():
                     model.eval()
                     with torch.no_grad():
@@ -310,12 +356,14 @@ class RETrainer(Trainer):
                         #     im_mask=im_mask,
                         #     infer_mode=infer_mode,
                         # )
-                        self.min_length = self.lorra_args.response_max_len
+                        
                         response_attention_mask = to_attention_mask[0][:, -self.min_length:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
+
                         # print(' === to_regress_embeds[0] =====')
                         # print(to_regress_embeds[0].shape)
                         # print(to_regress_embeds[1].shape)
                         # print(to_regress_embeds[2].shape)
+                        
                         orig_outputs = model(
                             input_ids=None,
                             attention_mask=to_attention_mask[0],
@@ -336,7 +384,6 @@ class RETrainer(Trainer):
                             infer_mode=infer_mode,
                         )['hidden_states']
                         
-                        
                         # Generate negative outputs
                         neg_outputs = model(
                             input_ids=None,
@@ -346,11 +393,12 @@ class RETrainer(Trainer):
                             output_hidden_states=True,
                             infer_mode=infer_mode,
                         )['hidden_states']
+                        
                         direction_hidden = [pos_outputs[l][:, -self.min_length:].detach() - \
                                             neg_outputs[l][:, -self.min_length:].detach() \
                                             # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
                                                             for l in self.target_layers]
-                        target_hidden = torch.stack([orig_hidden[i] + alpha * direction_hidden[i] for i in range(len(self.target_layers))]) * response_attention_mask
+                        target_hidden = torch.stack([orig_hidden[i] + self.lorra_args.lorra_alpha * direction_hidden[i] for i in range(len(self.target_layers))]) * response_attention_mask
             
                         del orig_outputs, pos_outputs, neg_outputs, orig_hidden, direction_hidden
                         gc.collect()
@@ -406,7 +454,7 @@ class DataCollatorForSupervisedDataset:
         
         batch = dict(
             orig_s=orig_s,
-            # text_input=orig_s,
+            text_input=orig_s,
             pos_s=pos_s,
             neg_s=neg_s,
             data_type=data_type,
@@ -579,7 +627,7 @@ def train():
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             target_modules=lora_args.lora_target_modules,
-            layers_to_transform=lora_layers_to_transform,
+            # layers_to_transform=lora_layers_to_transform,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
             task_type='CAUSAL_LM',
@@ -592,6 +640,8 @@ def train():
             model.enable_input_require_grads()
     
     model.interleav_wrap = partial(custom_interleav_wrap, model)
+    model.check_left_padding_with_embeddings = partial(check_left_padding_with_embeddings, model)
+    model.check_right_padding_with_embeddings = partial(check_right_padding_with_embeddings, model)
     print(transformers.processing_utils.logging.is_progress_bar_enabled())
     transformers.processing_utils.logging.enable_progress_bar()
 

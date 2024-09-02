@@ -1,8 +1,8 @@
 #!/bin/bash
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
-# CUDA_VISIBLE_DEVICES=2,3
-GPUS_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
+GPU=$1
+GPUS_PER_NODE=$(echo $GPU | tr ',' '\n' | wc -l)
 echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
 export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
@@ -28,7 +28,7 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 # torchrun $DISTRIBUTED_ARGS finetune.py \
-deepspeed --include=localhost:2,3 finetune.py \
+deepspeed --include=localhost:$GPU finetune.py \
     --model_name_or_path $MODEL \
     --data_path $DATA \
     --given_num True \

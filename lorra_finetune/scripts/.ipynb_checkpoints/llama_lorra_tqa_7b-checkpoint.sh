@@ -6,7 +6,7 @@ ds_master_port=$((29000 + RANDOM % 1000))
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=2,3 deepspeed --master_port $ds_master_port --num_gpus 2 src/llama2_lorra.py \
+deepspeed --master_port $ds_master_port --include=localhost:1 src/llama2_lorra.py \
     --model_name_or_path  "/home/yerong2/models/Llama-2-7b-chat-hf" \
     --user_tag '[INST]' \
     --assistant_tag '[/INST]' \
@@ -40,7 +40,7 @@ CUDA_VISIBLE_DEVICES=2,3 deepspeed --master_port $ds_master_port --num_gpus 2 sr
     --q_lora False \
     --deepspeed configs/ds_config_zero2.json \
     --gradient_checkpointing True \
-    --report_to none \
+    --report_to 'wandb' \
 
 
 # "/data/private_models/cais_models/llama-2/llama/llama-2-13b-chat-hf/"

@@ -1,4 +1,6 @@
 import torch
+import torch.nn.functional as F
+
 import gc
 import logging
 
@@ -14,6 +16,11 @@ def custom_interleav_wrap(self, img_list, text_list, padding_side='left', set_le
         img_embeds, atts_img, img_target = self.img2emb(image)
         text = text[0]
         parts = text.split('<ImageHere>')
+        # print('text ==== ')
+
+        # print(text)
+        # print(parts)
+
         wrap_tokens, wrap_embeds, wrap_atts, wrap_im_mask = [], [], [], []
         temp_len = 0
         image_nums, im_len = img_embeds.shape[:2]
@@ -77,7 +84,6 @@ def custom_interleav_wrap(self, img_list, text_list, padding_side='left', set_le
                 wrap_im_mask = torch.cat([wrap_im_mask, (torch.zeros(1, reslen)).to(wrap_target.dtype).to(self.device)], dim=1)
             elif padding_side == 'left':
                 # Left padding
-                # print(padding_side)
                 wrap_embeds = torch.cat([pad_emb.repeat(1, reslen, 1), wrap_embeds], dim=1)
                 wrap_atts = torch.cat([torch.zeros(1, reslen), torch.ones(1, temp_len)], dim=1).to(wrap_atts.dtype).to(self.device)
                 wrap_target = torch.cat([(torch.ones(1, reslen)*-100).to(wrap_target.dtype).to(self.device), wrap_target], dim=1)
@@ -102,3 +108,89 @@ def custom_interleav_wrap(self, img_list, text_list, padding_side='left', set_le
     # assert wrap_target.shape[1] == set_length, " Shape does not match"
     # assert wrap_im_mask.shape[1] == set_length, " Shape does not match"
     return wrap_embeds, wrap_atts, wrap_target, wrap_im_mask
+
+
+def check_right_padding_with_embeddings(self, to_regress_embeds, attention_mask):
+    """
+    Check if padding in `to_regress_embeds` matches the right side padding in `attention_mask` using cosine similarity.
+    """
+    pad_token_id = self.tokenizer.pad_token_id
+    pad_token_embedding = self.model.get_input_embeddings()(torch.tensor([pad_token_id]).to(to_regress_embeds.device)).squeeze(0)
+    
+    batch_size = to_regress_embeds.shape[0]
+    
+    for idx in range(batch_size):
+        embeds = to_regress_embeds[idx]
+        mask = attention_mask[idx]
+        
+        # Calculate cosine similarity between embeddings and pad_token_embedding
+        pad_token_embedding_expanded = pad_token_embedding.unsqueeze(0).expand_as(embeds)
+        similarities = F.cosine_similarity(embeds, pad_token_embedding_expanded, dim=-1)
+        
+        # Determine padding in embeddings
+        padding_threshold = 0.98  # Threshold for considering an embedding as padding
+        is_padding = similarities > padding_threshold
+        is_padding_int = is_padding.int()  # Convert boolean tensor to integer tensor
+        
+        # Find the first location where padding starts
+        if is_padding.any():
+            padding_start_embed = (is_padding_int.nonzero(as_tuple=False).min() if is_padding.any() else len(similarities)).item()
+        else:
+            padding_start_embed = len(similarities)
+            
+        padding_length_embed = len(similarities) - padding_start_embed
+        
+        # Determine padding from the attention mask
+        mask_list = mask.tolist()
+        padding_start_mask = mask_list.index(0) if 0 in mask_list else len(mask_list)
+        padding_length_mask = len(mask_list) - padding_start_mask
+
+        # IXC does not have a </s> as End-of-Sentenve token
+        # Assertions to ensure padding consistency
+        if padding_length_mask == 0:
+            assert padding_length_embed == 0, f"Expected padding length in embeddings to be 0 or 1 but got {padding_length_embed}."
+        else:
+            assert padding_start_embed == padding_start_mask, \
+                f"Expected padding start in embeddings to be {padding_start_mask - 1} but got {padding_start_embed}."
+
+def check_left_padding_with_embeddings(self, to_regress_embeds, attention_mask):
+    """
+    Check if left-side non-padding in `to_regress_embeds` matches the left-side non-padding in `attention_mask` using cosine similarity.
+    """
+    pad_token_id = self.tokenizer.pad_token_id
+    pad_token_embedding = self.model.get_input_embeddings()(torch.tensor([pad_token_id]).to(to_regress_embeds.device)).squeeze(0)
+    
+    batch_size = to_regress_embeds.shape[0]
+    
+    for idx in range(batch_size):
+        embeds = to_regress_embeds[idx]
+        mask = attention_mask[idx]
+        
+        # Calculate cosine similarity between embeddings and pad_token_embedding
+        pad_token_embedding_expanded = pad_token_embedding.unsqueeze(0).expand_as(embeds)
+        similarities = F.cosine_similarity(embeds, pad_token_embedding_expanded, dim=-1)
+        
+        # Determine non-padding in embeddings
+        padding_threshold = 0.99  # Threshold for considering an embedding as padding
+        is_padding = similarities > padding_threshold
+        is_padding_int = is_padding.int()  # Convert boolean tensor to integer tensor
+        
+        if 0 in is_padding_int:
+            first_non_padding_idx_embed = torch.argmin(is_padding_int).item()
+        else:
+            first_non_padding_idx_embed = len(is_padding_int)  # All are padding
+        
+        # Determine the first non-padding location from the attention mask
+        mask_list = mask.tolist()
+        first_non_padding_idx_mask = mask_list.index(1) if 1 in mask_list else len(mask_list)
+
+        
+        # Assertions to ensure non-padding consistency
+        assert first_non_padding_idx_embed == first_non_padding_idx_mask, \
+            f"Expected non-padding start in embeddings to be {first_non_padding_idx_mask} but got {first_non_padding_idx_embed}."
+        
+        # Check padding lengths
+        padding_length_embed = len(similarities) - first_non_padding_idx_embed
+        padding_length_mask = len(mask_list) - first_non_padding_idx_mask
+        assert padding_length_embed == padding_length_mask, \
+            f"Expected padding length in embeddings to be {padding_length_mask} but got {padding_length_embed}."
