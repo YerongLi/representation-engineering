@@ -53,7 +53,7 @@ deepspeed --master_port $ds_master_port --include localhost:$GPU src/mllm_lorra.
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
     --lr_scheduler_type "cosine" \
-    --report_to "wandb" \
+    --report_to "none" \
     --deepspeed ds_config_zero2.json \
     --gradient_checkpointing True \
     --lorra_alpha 16 \

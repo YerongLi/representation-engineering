@@ -8,10 +8,10 @@ import torch
 import transformers
 from accelerate.utils import DistributedType
 from data_mix import Mix_dataset
-from deepspeed import zero
-from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+# from deepspeed import zero
+# from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 from peft import LoraConfig, get_peft_model
-from transformers import Trainer, deepspeed
+from transformers import Trainer
 from transformers.trainer_pt_utils import LabelSmoother
 
 ## DEBUG
@@ -122,7 +122,8 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
                                    bias='none'):
     """Collects the state dict and dump to disk."""
     # check if zero3 mode enabled
-    if deepspeed.is_deepspeed_zero3_enabled():
+    # if deepspeed.is_deepspeed_zero3_enabled():
+    if False:
         state_dict = trainer.model_wrapped._zero3_consolidated_16bit_state_dict(
         )
     else:

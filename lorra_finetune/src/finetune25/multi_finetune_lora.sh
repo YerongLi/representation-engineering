@@ -38,7 +38,7 @@ deepspeed --include=localhost:$GPU finetune.py \
     --use_lora True \
     --hd_num 18 \
     --output_dir output/finetune_lora \
-    --num_train_epochs 10 \
+    --num_train_epochs 13 \
     --batch_size 4 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
@@ -51,7 +51,7 @@ deepspeed --include=localhost:$GPU finetune.py \
     --learning_rate 5e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
-    --warmup_ratio 0.01 \
+    --warmup_ratio 0.00 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \

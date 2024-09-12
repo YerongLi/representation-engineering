@@ -43,6 +43,7 @@ class TrainingArguments(transformers.TrainingArguments):
             'Maximum sequence length. Sequences will be right padded (and possibly truncated).'
         },
     )
+    from_checkpoint: str = None
     use_lora: bool = False
     fix_vit: bool = True
     fix_sampler: bool = False
@@ -225,7 +226,6 @@ def train():
 
     if getattr(training_args, 'deepspeed', None):
         training_args.distributed_state.distributed_type = DistributedType.DEEPSPEED
-
     local_rank = training_args.local_rank
 
     device_map = None
@@ -271,6 +271,11 @@ def train():
         model.vision_proj.requires_grad_(True)
 
     if training_args.use_lora:
+        if hasattr(training_args, 'from_checkpoint') and training_args.from_checkpoint:
+            from peft import PeftModel
+            model = PeftModel.from_pretrained(model, training_args.from_checkpoint)
+            model = model.merge_and_unload()
+            print(f" ==== Model merged successfully from checkpoint: {training_args.from_checkpoint}")
         for name, param in model.model.named_parameters():
             param.requires_grad = False
         lorra_target_layers = [10,12,14,16,18,20] # target representations

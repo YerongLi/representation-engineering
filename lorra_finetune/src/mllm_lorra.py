@@ -264,7 +264,8 @@ class RETrainer(Trainer):
 
 
                     self.model.check_right_padding_with_embeddings(q_to_regress_embeds[i],  q_attention_mask[i])
-                
+                print('  ===  q_to_regress_embeds[0].shape  ===')
+                print(q_to_regress_embeds[0].shape)
                 # Initialize the lists to store the outputs
                 r_to_regress_embeds = [None, None, None]
                 r_attention_mask = [None, None, None]
@@ -414,7 +415,9 @@ class RETrainer(Trainer):
             infer_mode=infer_mode,
         )['hidden_states']
         lora_hidden = torch.stack([lora_outputs[l][:, -self.min_length:] for l in self.target_layers]) * response_attention_mask
-    
+        print(' ==== lora_hidden.shape ====')
+        print(lora_hidden.shape)
+        print(Yerong)
         loss_fct = torch.nn.MSELoss()
         loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
         return (loss, lora_hidden) if return_outputs else loss
