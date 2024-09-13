@@ -1,4 +1,11 @@
 #!/bin/bash
+# Check if the GPU argument is provided
+if [ -z "$1" ]; then
+  echo "Error: No GPU argument provided."
+  echo "Usage: $0 <GPU>"
+  exit 1
+fi
+
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 GPU=$1
@@ -47,7 +54,7 @@ deepspeed --include=localhost:$GPU finetune.py \
     --save_steps 5 \
     --save_total_limit 1 \
     --overwrite_output_dir \
-    --learning_rate 1e-8 \
+    --learning_rate 5e-5 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
     --warmup_ratio 0.01 \
