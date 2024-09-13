@@ -5,8 +5,7 @@ GPU=$1
 GPUS_PER_NODE=$(echo $GPU | tr ',' '\n' | wc -l)
 echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
-export MODEL=$MODELS/internlm-xcomposer2d5-7b"
-# export MODEL="merged/finetune_lora"
+export MODEL=$MODELS/internlm-xcomposer2d5-7b
 
 # export DATA="path of data"
 export DATA="data.txt"
@@ -38,7 +37,7 @@ deepspeed --include=localhost:$GPU finetune.py \
     --use_lora True \
     --hd_num 18 \
     --output_dir output/finetune_lora \
-    --num_train_epochs 13 \
+    --num_train_epochs 12 \
     --batch_size 4 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
@@ -48,10 +47,10 @@ deepspeed --include=localhost:$GPU finetune.py \
     --save_steps 5 \
     --save_total_limit 1 \
     --overwrite_output_dir \
-    --learning_rate 5e-5 \
+    --learning_rate 1e-8 \
     --weight_decay 0.1 \
     --adam_beta2 0.95 \
-    --warmup_ratio 0.00 \
+    --warmup_ratio 0.01 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \

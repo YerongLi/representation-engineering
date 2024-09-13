@@ -5,7 +5,7 @@ GPU=$1
 GPUS_PER_NODE=$(echo $GPU | tr ',' '\n' | wc -l)
 echo "==== NUMBER OF GPUS ==== GPUS_PER_NODE=$GPUS_PER_NODE"
 
-export MODEL="/home/yerong2/models/internlm-xcomposer2d5-7b"
+export MODEL=$MODELS/internlm-xcomposer2d5-7b
 
 # export DATA="path of data"
 export DATA="data.txt"
