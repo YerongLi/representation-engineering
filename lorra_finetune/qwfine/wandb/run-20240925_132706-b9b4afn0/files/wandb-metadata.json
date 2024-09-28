@@ -1,0 +1,129 @@
+{
+  "os": "Linux-5.15.0-118-generic-x86_64-with-glibc2.35",
+  "python": "3.11.9",
+  "startedAt": "2024-09-25T18:27:06.094542Z",
+  "args": [
+    "--model_id_or_path",
+    "qwen/Qwen2.5-7B",
+    "--model_revision",
+    "master",
+    "--sft_type",
+    "lora",
+    "--tuner_backend",
+    "peft",
+    "--template_type",
+    "default-generation",
+    "--dtype",
+    "AUTO",
+    "--output_dir",
+    "output",
+    "--ddp_backend",
+    "nccl",
+    "--dataset",
+    "dureader-robust-zh",
+    "--train_dataset_sample",
+    "-1",
+    "--num_train_epochs",
+    "1",
+    "--max_length",
+    "2048",
+    "--check_dataset_strategy",
+    "warning",
+    "--lora_rank",
+    "8",
+    "--lora_alpha",
+    "32",
+    "--lora_dropout_p",
+    "0.05",
+    "--lora_target_modules",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "--gradient_checkpointing",
+    "true",
+    "--batch_size",
+    "1",
+    "--weight_decay",
+    "0.1",
+    "--learning_rate",
+    "1e-4",
+    "--gradient_accumulation_steps",
+    "16",
+    "--max_grad_norm",
+    "0.5",
+    "--warmup_ratio",
+    "0.03",
+    "--eval_steps",
+    "100",
+    "--save_steps",
+    "100",
+    "--save_total_limit",
+    "2",
+    "--logging_steps",
+    "10",
+    "--use_flash_attn",
+    "false",
+    "--deepspeed",
+    "default-zero2",
+    "--report_to",
+    "wandb",
+    "--max_steps",
+    "100"
+  ],
+  "program": "/home/yerong2/representation-engineering/lorra_finetune/qwfine/llm_sft.py",
+  "codePath": "lorra_finetune/qwfine/llm_sft.py",
+  "git": {
+    "remote": "git@github.com:YerongLi/representation-engineering.git",
+    "commit": "f24fe0c0a1cda9c6ef4704597841033784fd12d2"
+  },
+  "email": "yerong.li@outlook.com",
+  "root": "/home/yerong2/representation-engineering/lorra_finetune/qwfine",
+  "host": "is-saltgpu.ischool.illinois.edu",
+  "username": "yerong2",
+  "executable": "/home/yerong2/local/miniconda3/envs/qw/bin/python",
+  "codePathLocal": "llm_sft.py",
+  "cpu_count": 32,
+  "cpu_count_logical": 64,
+  "gpu": "[NVIDIA L40S, NVIDIA L40S, NVIDIA L40S, NVIDIA L40S]",
+  "gpu_count": 4,
+  "disk": {
+    "/": {
+      "total": "41956900864",
+      "used": "22879387648"
+    }
+  },
+  "memory": {
+    "total": "269936771072"
+  },
+  "cpu": {
+    "count": 32,
+    "countLogical": 64
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA L40S",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40S",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40S",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    },
+    {
+      "name": "NVIDIA L40S",
+      "memoryTotal": "48305799168",
+      "cudaCores": 18176,
+      "architecture": "Ada"
+    }
+  ],
+  "cudaVersion": "12.6"
+}

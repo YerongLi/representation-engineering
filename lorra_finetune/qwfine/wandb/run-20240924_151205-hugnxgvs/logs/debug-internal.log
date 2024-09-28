@@ -1,0 +1,18 @@
+{"time":"2024-09-24T15:12:05.07269028-05:00","level":"INFO","msg":"using version","core version":"0.18.1"}
+{"time":"2024-09-24T15:12:05.072698266-05:00","level":"INFO","msg":"created symlink","path":"/home/yerong2/representation-engineering/lorra_finetune/qwfine/wandb/run-20240924_151205-hugnxgvs/logs/debug-core.log"}
+{"time":"2024-09-24T15:12:05.072731531-05:00","level":"INFO","msg":"using version","core version":"0.18.1"}
+{"time":"2024-09-24T15:12:05.072734008-05:00","level":"INFO","msg":"created symlink","path":"/home/yerong2/representation-engineering/lorra_finetune/qwfine/wandb/run-20240924_151205-hugnxgvs/logs/debug-core.log"}
+{"time":"2024-09-24T15:12:05.074305773-05:00","level":"INFO","msg":"created new stream","id":"hugnxgvs"}
+{"time":"2024-09-24T15:12:05.074317288-05:00","level":"INFO","msg":"stream: started","id":"hugnxgvs"}
+{"time":"2024-09-24T15:12:05.074323606-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"hugnxgvs"}}
+{"time":"2024-09-24T15:12:05.074333065-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"hugnxgvs"}}
+{"time":"2024-09-24T15:12:05.07435495-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"hugnxgvs"}}
+{"time":"2024-09-24T15:12:05.208120337-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-09-24T15:12:05.209238129-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-09-24T15:58:40.346972321-05:00","level":"INFO","msg":"stream: closing","id":"hugnxgvs"}
+{"time":"2024-09-24T15:58:40.347036222-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-09-24T15:58:40.347199365-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-09-24T15:58:41.538876985-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"hugnxgvs"}}
+{"time":"2024-09-24T15:58:41.538913563-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"hugnxgvs"}}
+{"time":"2024-09-24T15:58:41.538920175-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"hugnxgvs"}}
+{"time":"2024-09-24T15:58:41.538951761-05:00","level":"INFO","msg":"stream: closed","id":"hugnxgvs"}

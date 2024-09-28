@@ -1,0 +1,18 @@
+{"time":"2024-09-27T20:51:49.927970911-05:00","level":"INFO","msg":"using version","core version":"0.18.1"}
+{"time":"2024-09-27T20:51:49.927979148-05:00","level":"INFO","msg":"created symlink","path":"/home/yerong2/representation-engineering/lorra_finetune/qwfine/wandb/run-20240927_205149-djlck4v9/logs/debug-core.log"}
+{"time":"2024-09-27T20:51:49.928004123-05:00","level":"INFO","msg":"using version","core version":"0.18.1"}
+{"time":"2024-09-27T20:51:49.928006459-05:00","level":"INFO","msg":"created symlink","path":"/home/yerong2/representation-engineering/lorra_finetune/qwfine/wandb/run-20240927_205149-djlck4v9/logs/debug-core.log"}
+{"time":"2024-09-27T20:51:49.929642093-05:00","level":"INFO","msg":"created new stream","id":"djlck4v9"}
+{"time":"2024-09-27T20:51:49.929654828-05:00","level":"INFO","msg":"stream: started","id":"djlck4v9"}
+{"time":"2024-09-27T20:51:49.929672974-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"djlck4v9"}}
+{"time":"2024-09-27T20:51:49.929671167-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"djlck4v9"}}
+{"time":"2024-09-27T20:51:49.929663038-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"djlck4v9"}}
+{"time":"2024-09-27T20:51:50.04164955-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-09-27T20:51:50.042365562-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-09-27T20:57:28.579235002-05:00","level":"INFO","msg":"stream: closing","id":"djlck4v9"}
+{"time":"2024-09-27T20:57:28.57958228-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-09-27T20:57:28.579861121-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-09-27T20:57:29.874700533-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"djlck4v9"}}
+{"time":"2024-09-27T20:57:29.874747257-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"djlck4v9"}}
+{"time":"2024-09-27T20:57:29.874764768-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"djlck4v9"}}
+{"time":"2024-09-27T20:57:29.8748125-05:00","level":"INFO","msg":"stream: closed","id":"djlck4v9"}

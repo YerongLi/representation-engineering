@@ -1,0 +1,110 @@
+Train:   0%|                                                                       | 0/200 [00:00<?, ?it/s]/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/utils/checkpoint.py:1399: FutureWarning: `torch.cpu.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cpu', args...)` instead.
+  with device_autocast_ctx, torch.cpu.amp.autocast(**cpu_autocast_kwargs), recompute_context:  # type: ignore[attr-defined]
+Train:  50%|██████████████████████████████▌                              | 100/200 [03:53<03:53,  2.33s/it]
+{'loss': 2.69973183, 'acc': 0.47710815, 'grad_norm': 3.78417444, 'learning_rate': 0.0, 'memory(GiB)': 19.7, 'train_speed(iter/s)': 0.210494, 'epoch': 0.0, 'global_step/max_steps': '1/200', 'percentage': '0.50%', 'elapsed_time': '2s', 'remaining_time': '8m 49s'}
+{'loss': 3.15134684, 'acc': 0.40955869, 'grad_norm': 6.66679096, 'learning_rate': 9.99e-05, 'memory(GiB)': 19.7, 'train_speed(iter/s)': 0.402848, 'epoch': 0.01, 'global_step/max_steps': '10/200', 'percentage': '5.00%', 'elapsed_time': '22s', 'remaining_time': '7m 11s'}
+{'loss': 1.83709888, 'acc': 0.60802836, 'grad_norm': 2.6493113, 'learning_rate': 9.872e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.41565, 'epoch': 0.02, 'global_step/max_steps': '20/200', 'percentage': '10.00%', 'elapsed_time': '46s', 'remaining_time': '6m 54s'}
+{'loss': 1.25486526, 'acc': 0.69308405, 'grad_norm': 4.62116194, 'learning_rate': 9.627e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.419296, 'epoch': 0.03, 'global_step/max_steps': '30/200', 'percentage': '15.00%', 'elapsed_time': '1m 9s', 'remaining_time': '6m 33s'}
+{'loss': 1.42517986, 'acc': 0.68155999, 'grad_norm': 2.67467403, 'learning_rate': 9.261e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.422521, 'epoch': 0.04, 'global_step/max_steps': '40/200', 'percentage': '20.00%', 'elapsed_time': '1m 32s', 'remaining_time': '6m 10s'}
+{'loss': 1.31733875, 'acc': 0.67832303, 'grad_norm': 2.92775249, 'learning_rate': 8.784e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.424504, 'epoch': 0.05, 'global_step/max_steps': '50/200', 'percentage': '25.00%', 'elapsed_time': '1m 55s', 'remaining_time': '5m 47s'}
+{'loss': 1.37870979, 'acc': 0.68239675, 'grad_norm': 2.85287404, 'learning_rate': 8.207e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.422917, 'epoch': 0.05, 'global_step/max_steps': '60/200', 'percentage': '30.00%', 'elapsed_time': '2m 19s', 'remaining_time': '5m 26s'}
+{'loss': 1.38907022, 'acc': 0.68619194, 'grad_norm': 4.69344234, 'learning_rate': 7.547e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.422225, 'epoch': 0.06, 'global_step/max_steps': '70/200', 'percentage': '35.00%', 'elapsed_time': '2m 43s', 'remaining_time': '5m 4s'}
+{'loss': 1.27781191, 'acc': 0.68540797, 'grad_norm': 3.80607748, 'learning_rate': 6.82e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.423577, 'epoch': 0.07, 'global_step/max_steps': '80/200', 'percentage': '40.00%', 'elapsed_time': '3m 6s', 'remaining_time': '4m 40s'}
+{'loss': 1.34168854, 'acc': 0.68972631, 'grad_norm': 3.69785118, 'learning_rate': 6.045e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.424051, 'epoch': 0.08, 'global_step/max_steps': '90/200', 'percentage': '45.00%', 'elapsed_time': '3m 30s', 'remaining_time': '4m 16s'}
+{'loss': 1.30351629, 'acc': 0.69683714, 'grad_norm': 2.21731019, 'learning_rate': 5.243e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.424193, 'epoch': 0.09, 'global_step/max_steps': '100/200', 'percentage': '50.00%', 'elapsed_time': '3m 53s', 'remaining_time': '3m 53s'}
+Val: 100%|███████████████████████████████████████████████████████████████| 178/178 [00:07<00:00, 22.79it/s]
+{'eval_loss': 1.29775929, 'eval_acc': 0.70323599, 'eval_runtime': 7.8923, 'eval_samples_per_second': 22.554, 'eval_steps_per_second': 22.554, 'epoch': 0.09, 'global_step/max_steps': '100/200', 'percentage': '50.00%', 'elapsed_time': '4m 1s', 'remaining_time': '4m 1s'}
+[INFO:swift] Saving model checkpoint to /home/yerong2/representation-engineering/lorra_finetune/qwfine/output/qwen2_5-7b/v21-20240927-205116/checkpoint-100
+/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/utils/checkpoint.py:1399: FutureWarning: `torch.cpu.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cpu', args...)` instead.
+  with device_autocast_ctx, torch.cpu.amp.autocast(**cpu_autocast_kwargs), recompute_context:  # type: ignore[attr-defined]
+Train:  69%|██████████████████████████████████████████                   | 138/200 [05:37<02:24,  2.33s/it]Traceback (most recent call last):
+{'loss': 1.39855642, 'acc': 0.68611784, 'grad_norm': 2.63008094, 'learning_rate': 4.435e-05, 'memory(GiB)': 24.65, 'train_speed(iter/s)': 0.400223, 'epoch': 0.1, 'global_step/max_steps': '110/200', 'percentage': '55.00%', 'elapsed_time': '4m 32s', 'remaining_time': '3m 43s'}
+{'loss': 1.473559, 'acc': 0.6637219, 'grad_norm': 3.17692542, 'learning_rate': 3.641e-05, 'memory(GiB)': 24.65, 'train_speed(iter/s)': 0.403189, 'epoch': 0.11, 'global_step/max_steps': '120/200', 'percentage': '60.00%', 'elapsed_time': '4m 55s', 'remaining_time': '3m 17s'}
+{'loss': 1.24881344, 'acc': 0.67354064, 'grad_norm': 2.52275562, 'learning_rate': 2.884e-05, 'memory(GiB)': 24.65, 'train_speed(iter/s)': 0.405267, 'epoch': 0.12, 'global_step/max_steps': '130/200', 'percentage': '65.00%', 'elapsed_time': '5m 18s', 'remaining_time': '2m 51s'}
+  File "/home/yerong2/representation-engineering/lorra_finetune/qwfine/llm_sft.py", line 9, in <module>
+    output = sft_main()
+             ^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/utils/run_utils.py", line 32, in x_main
+    result = llm_x(args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/llm/sft.py", line 517, in llm_sft
+    return trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/llm/sft.py", line 467, in trainer_train
+    trainer.train(training_args.resume_from_checkpoint)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/trainers/mixin.py", line 424, in train
+    res = super().train(resume_from_checkpoint, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/transformers/trainer.py", line 1938, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/transformers/trainer.py", line 2279, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/transformers/trainer.py", line 3349, in training_step
+    self.accelerator.backward(loss, **kwargs)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/accelerate/accelerator.py", line 2151, in backward
+    self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/accelerate/utils/deepspeed.py", line 166, in backward
+    self.engine.backward(loss, **kwargs)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/utils/nvtx.py", line 18, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/runtime/engine.py", line 2020, in backward
+    self.optimizer.backward(loss, retain_graph=retain_graph)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 2064, in backward
+    self.loss_scaler.backward(loss.float(), retain_graph=retain_graph)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/runtime/fp16/loss_scaler.py", line 63, in backward
+    scaled_loss.backward(retain_graph=retain_graph)
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/_tensor.py", line 521, in backward
+    torch.autograd.backward(
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/autograd/__init__.py", line 289, in backward
+    _engine_run_backward(
+  File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/autograd/graph.py", line 768, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/yerong2/representation-engineering/lorra_finetune/qwfine/llm_sft.py", line 9, in <module>
+[rank0]:     output = sft_main()
+[rank0]:              ^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/utils/run_utils.py", line 32, in x_main
+[rank0]:     result = llm_x(args, **kwargs)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/llm/sft.py", line 517, in llm_sft
+[rank0]:     return trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/llm/sft.py", line 467, in trainer_train
+[rank0]:     trainer.train(training_args.resume_from_checkpoint)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/swift/trainers/mixin.py", line 424, in train
+[rank0]:     res = super().train(resume_from_checkpoint, *args, **kwargs)
+[rank0]:           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/transformers/trainer.py", line 1938, in train
+[rank0]:     return inner_training_loop(
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/transformers/trainer.py", line 2279, in _inner_training_loop
+[rank0]:     tr_loss_step = self.training_step(model, inputs)
+[rank0]:                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/transformers/trainer.py", line 3349, in training_step
+[rank0]:     self.accelerator.backward(loss, **kwargs)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/accelerate/accelerator.py", line 2151, in backward
+[rank0]:     self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/accelerate/utils/deepspeed.py", line 166, in backward
+[rank0]:     self.engine.backward(loss, **kwargs)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/utils/nvtx.py", line 18, in wrapped_fn
+[rank0]:     ret_val = func(*args, **kwargs)
+[rank0]:               ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/runtime/engine.py", line 2020, in backward
+[rank0]:     self.optimizer.backward(loss, retain_graph=retain_graph)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 2064, in backward
+[rank0]:     self.loss_scaler.backward(loss.float(), retain_graph=retain_graph)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/deepspeed/runtime/fp16/loss_scaler.py", line 63, in backward
+[rank0]:     scaled_loss.backward(retain_graph=retain_graph)
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/_tensor.py", line 521, in backward
+[rank0]:     torch.autograd.backward(
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/autograd/__init__.py", line 289, in backward
+[rank0]:     _engine_run_backward(
+[rank0]:   File "/home/yerong2/local/miniconda3/envs/qw/lib/python3.11/site-packages/torch/autograd/graph.py", line 768, in _engine_run_backward
+[rank0]:     return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]: KeyboardInterrupt
