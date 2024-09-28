@@ -1749,6 +1749,7 @@ class ExportArguments(InferArguments):
 @dataclass
 class PtArguments(SftArguments):
     reeng : bool = False
+    yerong_type: Literal['lora', 'full', 'longlora', 'adalora', 'ia3', 'llamapro', 'vera', 'boft'] = 'full'
     sft_type: Literal['lora', 'full', 'longlora', 'adalora', 'ia3', 'llamapro', 'vera', 'boft'] = 'full'
     target_modules: List[str] = field(default_factory=lambda: ['ALL'])
     lazy_tokenize: Optional[bool] = True

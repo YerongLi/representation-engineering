@@ -21,6 +21,7 @@ torchrun \
     --model_id_or_path qwen/Qwen2.5-7B \
     --model_revision master \
     --sft_type lora \
+    --yerong_type lora \
     --tuner_backend peft \
     --template_type default-generation \
     --dtype AUTO \
