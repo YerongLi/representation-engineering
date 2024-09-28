@@ -1,0 +1,5 @@
+Checkpoint : custom trainer
+{'loss': 12.69973183, 'acc': 0.47710815, 'grad_norm': 3.78417444, 'learning_rate': 0.0, 'memory(GiB)': 19.7, 'train_speed(iter/s)': 0.259045, 'epoch': 0.0, 'global_step/max_steps': '1/200', 'percentage': '0.50%', 'elapsed_time': '2s', 'remaining_time': '8m 41s'}
+{'loss': 13.15134854, 'acc': 0.40955869, 'grad_norm': 6.66679096, 'learning_rate': 9.99e-05, 'memory(GiB)': 19.7, 'train_speed(iter/s)': 0.418844, 'epoch': 0.01, 'global_step/max_steps': '10/200', 'percentage': '5.00%', 'elapsed_time': '22s', 'remaining_time': '7m 10s'}
+{'loss': 11.83709869, 'acc': 0.60802836, 'grad_norm': 2.6493113, 'learning_rate': 9.872e-05, 'memory(GiB)': 23.63, 'train_speed(iter/s)': 0.422607, 'epoch': 0.02, 'global_step/max_steps': '20/200', 'percentage': '10.00%', 'elapsed_time': '46s', 'remaining_time': '6m 54s'}
+Train:  13%|████████                                                      | 26/200 [01:00<06:41,  2.31s/it]
