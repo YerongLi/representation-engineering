@@ -1,4 +1,11 @@
 #!/bin/bash
+# Check if the GPU argument is provided
+if [ -z "$1" ]; then
+  echo "Error: No GPU argument provided."
+  echo "Usage: $0 <GPU>"
+  exit 1
+fi
+
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 DIR=`pwd`
 GPU=$1
