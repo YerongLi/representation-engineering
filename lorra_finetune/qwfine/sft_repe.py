@@ -21,7 +21,7 @@ from swift.utils import (append_to_jsonl, check_json_format, compute_acc_metrics
                          preprocess_logits_for_metrics, seed_everything, show_layers, use_torchacc)
 from swift.llm.accelerator import ta_accelerate
 from tuner import prepare_model
-from utils import (TEMPLATE_MAPPING, LazyLLMDataset, PtArguments, RLHFArguments, SftArguments, Template, dataset_map,
+from utils import (TEMPLATE_MAPPING, LazyLLMDataset, PtArguments, RLHFArguments, SftArguments, LorraArguments,Template, dataset_map,
                     dynamic_vit_gradient_checkpointing, get_dataset, get_model_tokenizer, get_template, get_time_info,
                     print_example, set_generation_config, sort_by_max_length, stat_dataset)
 
@@ -539,5 +539,5 @@ def get_sft_main(args, llm):
     return get_main(args, llm)
 
 
-sft_main = get_sft_main(SftArguments, llm_sft)
-pt_main = get_sft_main(PtArguments, llm_sft)
+sft_main = get_sft_main(LorraArguments, llm_sft)
+# pt_main = get_sft_main(PtArguments, llm_sft)

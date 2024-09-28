@@ -21,7 +21,15 @@ torchrun \
     --model_id_or_path qwen/Qwen2.5-7B \
     --model_revision master \
     --sft_type lora \
-    --yerong_type lora \
+    --reeng true \
+    --lorra_alpha 16 \
+    --user_tag '' \
+    --assistant_tag '[/INST]' \
+    --control_template "{type}" \
+    --template_system "ixc_system" \
+    --pos_type 'As a precise assistant solving a vision math problem, extract key information from the image, solve the following math problem, and carefully reason through each step to provide a truthful and accurate solution.' \
+    --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
+    --target_layers "10,12,14,16,18,20" \
     --tuner_backend peft \
     --template_type default-generation \
     --dtype AUTO \

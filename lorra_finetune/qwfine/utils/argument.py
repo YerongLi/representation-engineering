@@ -42,7 +42,7 @@ DATASET_TYPE = Union[HfDataset, HfIterableDataset]
 
 def is_adapter(sft_type: str) -> bool:
     return sft_type in {
-        'lora', 'longlora', 'adalora', 'ia3', 'llamapro', 'adapter', 'vera', 'boft', 'fourierft', 'reft', 'reeng'
+        'lora', 'longlora', 'adalora', 'ia3', 'llamapro', 'adapter', 'vera', 'boft', 'fourierft', 'reft'
     }
 
 
@@ -605,7 +605,6 @@ class ArgumentsBase:
         if self.val_dataset is None:
             self.val_dataset = []
 
-
 @dataclass
 class SftArguments(ArgumentsBase):
     # You can specify the model by either using the model_type or model_id_or_path.
@@ -615,9 +614,8 @@ class SftArguments(ArgumentsBase):
     model_revision: Optional[str] = None
 
     full_determinism: bool = False
-
     sft_type: Literal['lora','full', 'longlora', 'adalora', 'ia3', 'llamapro', 'adapter', 'vera', 'boft', 'fourierft',
-                      'reft', 'reeng'] = 'lora'
+                      'reft'] = 'lora'
     freeze_parameters: List[str] = field(default_factory=list)
     freeze_vit: bool = False
     freeze_parameters_ratio: float = 0.  # 0 ~ 1
@@ -1184,9 +1182,8 @@ class SftArguments(ArgumentsBase):
     def _init_training_args(self) -> None:
         self.train_type = self.rlhf_type if hasattr(self, 'rlhf_type') else 'sft'
         # representation engineering
-        print(' === qwfine/utils/argument.py')
-        self.train_type = 'reeng' # DEBUG
-        print(' === qwfine/utils/argument.py')
+        if self.reeng:
+            self.train_type = 'reeng' # DEBUG
         training_args_cls, kwargs = TrainerFactory.get_training_args_info(self)
         additional_saved_files = []
         if self.sft_type == 'full':
@@ -1749,11 +1746,25 @@ class ExportArguments(InferArguments):
 @dataclass
 class PtArguments(SftArguments):
     reeng : bool = False
-    yerong_type: Literal['lora', 'full', 'longlora', 'adalora', 'ia3', 'llamapro', 'vera', 'boft'] = 'full'
     sft_type: Literal['lora', 'full', 'longlora', 'adalora', 'ia3', 'llamapro', 'vera', 'boft'] = 'full'
     target_modules: List[str] = field(default_factory=lambda: ['ALL'])
     lazy_tokenize: Optional[bool] = True
     eval_steps: int = 500
+
+@dataclass
+class LorraArguments(SftArguments):
+    user_tag: str = field(default='',metadata={"help": "User tag for chat models (eg: `USER:` or `[INST]`)"})
+    assistant_tag: str = field(default='[/INST]', metadata={"help": "Assistant tag for chat models (eg: `ASSISTANT:` or `[\INST]`)"})
+    pos_type: str = field(default='truthful', metadata={"help": "Concept/Function to be optimized towards (eg: 'a truthful')"})
+    neg_type: str = field(default='untruthful', metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"})
+    target_layers: str = field(default='10,12,14,16,18,20', metadata={"help": "Layers for Representation. Layers are seperate by `,` eg: `10,12,14,16,18,20` "})
+    control_template: str = field(default=' Give a {type} answer', metadata={"help": "Control template for Representation setting (eg: Give a {type} answer)"})
+    template_system: str = field(default='ixc_system', metadata={"help": "template system, i.e. ixc_system, ixc_suffix etc."})
+    lorra_alpha: float = field(default=16, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    lorra_beta: float = field(default=0, metadata={"help": "vice versa of pos_type (eg: 'an untruthful')"}) # LoRRA Hyperparameters
+    query_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    response_max_len: int = field(default=64, metadata={"help": "truncated length for getting generated ouputs from lorra pos/neg exampels"}) # LoRRA Hyperparameters
+    reeng : bool = True
 
 
 @dataclass
@@ -1882,3 +1893,4 @@ def _parse_lora_modules(lora_modules: List[str], use_vllm: bool) -> Tuple[List[A
     else:
         use_dora = True
     return lora_request_list, use_dora
+
