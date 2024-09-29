@@ -428,9 +428,7 @@ def trainer_train(args,
     logger.info(f'training_args: {training_args}')
 
     trainer_cls, trainer_kwargs = TrainerFactory.get_trainer_info(args)
-    print(' =====  qwfine/sft_repe.py')
-    print(trainer_cls)
-    print(' ===== qwfine/sft_repe.py ')
+
     # exit(0)
     if not hasattr(model.config, 'is_encoder_decoder'):
         model.config.is_encoder_decoder = False
@@ -457,6 +455,7 @@ def trainer_train(args,
         tokenizer=tokenizer,
         callbacks=callbacks,
         **trainer_kwargs)
+
     trainer.is_multimodal = args.is_multimodal
     trainer.sft_args = args
     if use_torchacc():
@@ -520,6 +519,9 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
         return llm_sft_megatron(args)
     msg = {}
     model, template, callbacks = prepare_model_template_train(args, msg)
+    print(' === qwfine/sft_repe.py')
+    print(type(template))
+    print(' === qwfine/sft_repe.py')
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
     return trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)
 

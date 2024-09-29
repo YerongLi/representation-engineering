@@ -18,8 +18,10 @@ torchrun \
     --nproc_per_node=$nproc_per_node \
     --master_port $ds_master_port \
     llm_sft.py \
-    --model_id_or_path qwen/Qwen2.5-7B \
+    --model_id_or_path qwen/Qwen2-VL-7B-Instruct \
+    --model_type qwen2-vl-7b-instruct \
     --model_revision master \
+    --dataset ../ms-data/math360k/trainCoT.json \
     --sft_type lora \
     --reeng true \
     --lorra_alpha 16 \
@@ -31,11 +33,9 @@ torchrun \
     --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
     --target_layers "10,12,14,16,18,20" \
     --tuner_backend peft \
-    --template_type default-generation \
     --dtype AUTO \
     --output_dir output \
     --ddp_backend nccl \
-    --dataset dureader-robust-zh \
     --train_dataset_sample -1 \
     --num_train_epochs 1 \
     --max_length 2048 \
@@ -60,4 +60,10 @@ torchrun \
     --report_to none \
     --max_steps 200 \
     # --resume_from_checkpoint output/qwen2_5-7b/v17-20240926-073918/checkpoint-100
-# $MODELS/Qwen2.5-7B \
+# $MODELS/Qwen2.5-7B 
+    # --dataset dureader-robust-zh \
+    # --dataset coco-en-mini#20000 \
+            # --template_type qwen2-vl \
+
+    # --model_id_or_path qwen/Qwen2-VL-7B-Instruct \
+        

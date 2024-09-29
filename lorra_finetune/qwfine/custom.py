@@ -81,7 +81,7 @@ if __name__ == '__main__':
     # The Shell script can view `examples/pytorch/llm/scripts/custom`.
     # test dataset
     train_dataset, val_dataset = get_dataset([CustomDatasetName.stsb_en], check_dataset_strategy='warning')
-    print(type(train_dataset))
+    # print(type(train_dataset))
     # exit(1)
     print(f'train_dataset: {train_dataset}')
     print(f'val_dataset: {val_dataset}')

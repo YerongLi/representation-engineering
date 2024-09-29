@@ -1529,6 +1529,9 @@ class _Qwen2VLTemplateMixin:
             pixel_values = pixel_values.type(model.visual.get_dtype())
             image_embeds = model.visual(pixel_values, grid_thw=media_inputs['image_grid_thw'])
             inputs_embeds += image_embeds.mean() * 0.
+            print(' === qwfine/utils/template.py ===')
+            print(inputs_embeds[0].shape)
+            print(' === qwfine/utils/template.py ===')
             return {'inputs_embeds': inputs_embeds[0]}
         return {}
 

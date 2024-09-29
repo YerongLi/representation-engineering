@@ -1184,6 +1184,7 @@ class SftArguments(ArgumentsBase):
         # representation engineering
         if self.reeng:
             self.train_type = 'reeng' # DEBUG
+        
         training_args_cls, kwargs = TrainerFactory.get_training_args_info(self)
         additional_saved_files = []
         if self.sft_type == 'full':

@@ -21,6 +21,15 @@ from swift.trainers.mixin import SwiftMixin
 # from .push_to_ms import PushToMsHubMixin
 from swift.trainers.push_to_ms import PushToMsHubMixin
 
+import os
+from transformers import AutoTokenizer
+
+# Construct the path using the environment's home directory
+home_dir = os.path.expanduser("~")  # This resolves to /home/yerong
+tokenizer_path = os.path.join(home_dir, ".cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct")
+
+# Load the tokenizer from the specified path
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 
 class Trainer(PushToMsHubMixin, SwiftMixin, HfTrainer):
     pass
@@ -225,6 +234,12 @@ class Seq2SeqTrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         return (loss, outputs) if return_outputs else loss
 
 
+
+
+
+
+
+
 class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
 
     def __init__(self, *args, **kwargs):
@@ -251,7 +266,6 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         if not self.args.predict_with_generate or prediction_loss_only:
             return super().prediction_step(
                 model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys)
-
         inputs.pop('loss_scale', None)
         has_labels = 'labels' in inputs
         inputs = self._prepare_inputs(inputs)
@@ -346,7 +360,6 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
     def compute_loss(self, model, inputs, return_outputs=None):
         if not hasattr(self, '_custom_metrics'):
             self._custom_metrics = {}
-
         labels = None
         loss_name = self.args.loss_name
         if loss_name is None and 'loss_scale' in inputs:
@@ -360,6 +373,8 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = inputs.pop('labels')
 
         loss_kwargs['labels'] = labels
+        
+
         outputs = model(**inputs)
         if loss_name is not None:
             loss_func = get_loss_func(loss_name)
@@ -421,4 +436,5 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
                 if 'acc' not in self._custom_metrics:
                     self._custom_metrics['acc'] = self._acc
                 self._custom_metrics['acc'] = self._custom_metrics['acc'] + acc / self.args.gradient_accumulation_steps
-        return (loss+ torch.tensor(10.0, device=loss.device), outputs) if return_outputs else loss+ torch.tensor(10.0, device=loss.device)
+        return (loss, outputs) if return_outputs else loss
+        # return (loss+ torch.tensor(10.0, device=loss.device), outputs) if return_outputs else loss+ torch.tensor(10.0, device=loss.device)
