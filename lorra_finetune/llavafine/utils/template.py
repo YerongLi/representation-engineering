@@ -2252,11 +2252,7 @@ class RepeInternLMXComposer2Template(Template):
             HD_transform = get_class_from_dynamic_module('ixc_utils.HD_transform', self.tokenizer.model_dir)
             images = [HD_transform(image, hd_num=hd_num) for image in images]
         images = [self.model.vis_processor(image).to(dtype) for image in images]
-        # print('=== utils/template === ')
-        # print(inputs['input_ids'])
-        # decoded_text = tokenizer.decode(inputs['input_ids'], skip_special_tokens=False)
-        # print(decoded_text)
-        # exit()
+
         inputs['_data'] = {'input_ids': inputs['input_ids'], 'labels': inputs['labels'], 'images': images}
         return inputs, {}
 
@@ -2290,8 +2286,6 @@ class RepeInternLMXComposer2Template(Template):
             images = torch.concat([model.img2emb(image[None])[0] for image in images], dim=0)
         while i < len(input_ids):
             if input_ids[i] == 2:  # replace_token
-                print('input_ids[i]',input_ids[i])
-                print(tokenizer.decode([input_ids[i]]))
                 res_input_ids = torch.tensor([1] + input_ids[pre_i:i], device=device)
                 res_inputs_embeds.append(tok_embeddings(res_input_ids[None])[0])
                 wrap_im_mask += [0] * len(res_input_ids)
@@ -2307,6 +2301,7 @@ class RepeInternLMXComposer2Template(Template):
             i += 1
         if len(labels) == 0:
             res_labels = None
+
         res_inputs_embeds = torch.concat(res_inputs_embeds, dim=0)
         wrap_im_mask = torch.tensor(wrap_im_mask, dtype=torch.bool, device=device)[None]
         return {'inputs_embeds': res_inputs_embeds, 'im_mask': wrap_im_mask, 'labels': res_labels}

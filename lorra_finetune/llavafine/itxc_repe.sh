@@ -18,9 +18,9 @@ torchrun \
     --nproc_per_node=$nproc_per_node \
     --master_port $ds_master_port \
     llm_sft.py \
-    --model_id_or_path Shanghai_AI_Laboratory/internlm-xcomposer2-7b \
+    --model_id_or_path "Shanghai_AI_Laboratory/internlm-xcomposer2-7b" \
     --model_revision master \
-    --dataset ../ms-data/math360k/it/trainCoT.json \
+    --dataset ../ms-data/math360k/qw/trainCoT.json \
     --sft_type lora \
     --reeng true \
     --lorra_alpha 16 \

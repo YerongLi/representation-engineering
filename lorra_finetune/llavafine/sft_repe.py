@@ -1,4 +1,5 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
+import copy
 import os
 from functools import partial
 from typing import Any, Dict, Optional, Tuple
@@ -21,7 +22,7 @@ from swift.utils import (append_to_jsonl, check_json_format, compute_acc_metrics
                          preprocess_logits_for_metrics, seed_everything, show_layers, use_torchacc)
 from swift.llm.accelerator import ta_accelerate
 from tuner import prepare_model
-from utils import (TEMPLATE_MAPPING, LazyLLMDataset, PtArguments, RLHFArguments, SftArguments, LorraArguments,Template, dataset_map,
+from utils import (TEMPLATE_MAPPING, LazyLLMDataset, RepeLazyLLMDataset, PtArguments, RLHFArguments, SftArguments, LorraArguments,Template, dataset_map,
                     dynamic_vit_gradient_checkpointing, get_dataset, get_model_tokenizer, get_template, get_time_info,
                     print_example, set_generation_config, sort_by_max_length, stat_dataset)
 
@@ -375,6 +376,7 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
                     template.model = None
         td0, tkwargs0 = template.encode(train_dataset[0])
         print_example(td0, tokenizer, tkwargs0)
+
         train_dataset = dataset_map(train_dataset, template.encode, args.preprocess_num_proc, streaming=args.streaming)
         if val_dataset is not None:
             val_dataset = dataset_map(val_dataset, template.encode, args.preprocess_num_proc, streaming=args.streaming)
@@ -394,17 +396,21 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
             if val_dataset is not None:
                 dataset_info['val_dataset'] = stat_dataset(val_dataset)
     else:
+
+
+
+        # Update the templates based on arguments or specific conditions
+        # Prefix Perturbation
+        # Process the datasets based on the templates
         td0, tkwargs0 = template.encode(train_dataset[0])
         print_example(td0, tokenizer, tkwargs0)
-        
-        train_dataset = LazyLLMDataset(train_dataset, template.encode)
+        train_dataset = RepeLazyLLMDataset(train_dataset, template.encode)
         if val_dataset is not None:
-            val_dataset = LazyLLMDataset(val_dataset, template.encode)
-        print(train_dataset)
-        exit()
+            val_dataset = RepeLazyLLMDataset(val_dataset, template.encode)
     if isinstance(msg, dict):
         msg['dataset_info'] = dataset_info
     return train_dataset, val_dataset
+
 
 
 def trainer_train(args,
@@ -420,9 +426,9 @@ def trainer_train(args,
     training_args = args.training_args
     padding_to = args.max_length if args.sft_type == 'longlora' else None
     tokenizer = template.tokenizer
-    print(' ==== llavafine/sft_repe.py ')
-    print(type(template))
-    print(' ==== llavafine/sft_repe.py ')
+    # print(' ==== llavafine/sft_repe.py ')
+    # print(type(template))
+    # print(' ==== llavafine/sft_repe.py ')
     # exit()
     data_collator = partial(template.data_collator, padding_to=padding_to)
 

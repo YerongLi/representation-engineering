@@ -264,9 +264,45 @@ class LazyLLMDataset(Dataset):
                 return res
 
     def __len__(self) -> int:
+        return len(self.dataset) 
+
+
+class RepeLazyLLMDataset(Dataset):
+
+    def __init__(self,
+                 dataset: HfDataset,
+                 encode_func: Callable[[Dict[str, Any]], Union[Tuple[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]],
+                 *,
+                 try_fetch_time: int = 20) -> None:
+        self.dataset = dataset
+        self.encode_func = encode_func
+        self.try_fetch_time = min(try_fetch_time, len(self.dataset))
+        assert self.try_fetch_time >= 1
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        res = self._try_fetch(idx)
+        if res is not None:
+            return res
+        raise ValueError('Please check if the max_length is appropriate.')
+
+    def _try_fetch(self, first_idx: int) -> Optional[Dict[str, Any]]:
+        idx = np.random.permutation(len(self))[:self.try_fetch_time - 1]
+        for i in [first_idx] + idx.tolist():
+            data = self.dataset[i]
+            try:
+                res = [self.encode_func(data), self.encode_func(data), self.encode_func(data)]
+                if isinstance(res, (tuple, list)) and len(res) == 2:
+                    res = res[0]
+            except Exception as e:
+                logger.error(f'Error occurs in lazy tokenize: {e}')
+                continue
+            if len(res) > 0:
+                return res
+
+    def __len__(self) -> int:
         return len(self.dataset)
-
-
+    
+    
 MapFunc = Callable[[Dict[str, Any]], Tuple[Dict[str, Any], Dict[str, Any]]]
 
 
