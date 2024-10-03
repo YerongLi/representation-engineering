@@ -404,8 +404,10 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
         # Process the datasets based on the templates
         td0, tkwargs0 = template.encode(train_dataset[0])
         print_example(td0, tokenizer, tkwargs0)
+        # train_dataset = LazyLLMDataset(train_dataset, template.encode)
         train_dataset = RepeLazyLLMDataset(train_dataset, template.encode)
         if val_dataset is not None:
+            # val_dataset = LazyLLMDataset(val_dataset, template.encode)
             val_dataset = RepeLazyLLMDataset(val_dataset, template.encode)
     if isinstance(msg, dict):
         msg['dataset_info'] = dataset_info

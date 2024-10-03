@@ -360,7 +360,8 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = inputs.pop('labels')
 
         loss_kwargs['labels'] = labels
-        outputs = model(**inputs)
+        
+        outputs = model(**inputs[0])
         if loss_name is not None:
             loss_func = get_loss_func(loss_name)
             outputs['loss'] = loss_func(outputs, **loss_kwargs)

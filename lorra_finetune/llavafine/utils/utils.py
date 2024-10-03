@@ -261,6 +261,8 @@ class LazyLLMDataset(Dataset):
                 logger.error(f'Error occurs in lazy tokenize: {e}')
                 continue
             if len(res) > 0:
+                print(type(res))
+                print(res)
                 return res
 
     def __len__(self) -> int:
@@ -290,9 +292,9 @@ class RepeLazyLLMDataset(Dataset):
         for i in [first_idx] + idx.tolist():
             data = self.dataset[i]
             try:
-                res = [self.encode_func(data), self.encode_func(data), self.encode_func(data)]
-                if isinstance(res, (tuple, list)) and len(res) == 2:
-                    res = res[0]
+                res = [self.encode_func(data)[0], self.encode_func(data)[0], self.encode_func(data)[0]]
+                # if isinstance(res, (tuple, list)) and len(res) == 2:
+                #     res = res[0]
             except Exception as e:
                 logger.error(f'Error occurs in lazy tokenize: {e}')
                 continue
