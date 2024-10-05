@@ -261,8 +261,6 @@ class LazyLLMDataset(Dataset):
                 logger.error(f'Error occurs in lazy tokenize: {e}')
                 continue
             if len(res) > 0:
-                print(type(res))
-                print(res)
                 return res
 
     def __len__(self) -> int:
@@ -286,15 +284,18 @@ class RepeLazyLLMDataset(Dataset):
         if res is not None:
             return res
         raise ValueError('Please check if the max_length is appropriate.')
+ 
 
     def _try_fetch(self, first_idx: int) -> Optional[Dict[str, Any]]:
         idx = np.random.permutation(len(self))[:self.try_fetch_time - 1]
         for i in [first_idx] + idx.tolist():
             data = self.dataset[i]
             try:
-                res = [self.encode_func(data)[0], self.encode_func(data)[0], self.encode_func(data)[0]]
+                # res = self.encode_func(data)
                 # if isinstance(res, (tuple, list)) and len(res) == 2:
-                #     res = res[0]
+                    # res = res[0]
+                res = {'cons' : [self.encode_func(data)[0], self.encode_func(data)[0], self.encode_func(data)[0]]}
+                # res = {'cons' : [ ]}
             except Exception as e:
                 logger.error(f'Error occurs in lazy tokenize: {e}')
                 continue
