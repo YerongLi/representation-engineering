@@ -2216,8 +2216,40 @@ class InternLMXComposer2Template(Template):
 
 
 # class RepeInternLMXComposer2Template(InternLMXComposer2Template):
+class RepeTemplate(Template):
+    def _init_template(self,
+                       tokenizer: PreTrainedTokenizerBase,
+                       default_system: Optional[str] = None,
+                       max_length: Optional[int] = None,
+                       truncation_strategy: Literal['delete', 'truncation_left'] = 'delete',
+                       model: torch.nn.Module = None,
+                       **kwargs) -> None:
+        # Call the parent class's __init_template__ method
+        super()._init_template(tokenizer, default_system, max_length, truncation_strategy, model, **kwargs)
+        assert 'query_max_len' in kwargs, "query_max_len must be provided in kwargs"
+        assert 'response_max_len' in kwargs, "response_max_len must be provided in kwargs"
+        self.query_max_len = kwargs.get('query_max_len')
+        self.response_max_len = kwargs.get('response_max_len')
     
-class RepeInternLMXComposer2Template(Template):
+    def encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        from .utils import to_device
+        print(self.query_max_len, self.response_max_len)
+        example = self.preprocess(example)
+        _encode = self._encode
+        if self._is_lmdeploy or self._is_vllm:
+            assert self.is_multimodal is not None, 'Please use the get_model_tokenizer function.'
+            _encode = MethodType(Template._encode, self)
+        response = example['response']
+        example['response'] = ''
+        res = _encode(example)
+        inputs = res[0]
+        if not self._is_training and '_data' in inputs:
+            data = inputs.pop('_data')
+            data = to_device(data, self.model.device)
+            inputs.update(self._post_encode(self.model, data))
+        return res if not streaming else inputs
+
+class RepeInternLMXComposer2Template(RepeTemplate):
     INTERNLM_XCOMPOSER_SYSTEM = (
         'You are an AI assistant whose name is InternLM-XComposer (浦语·灵笔).\n'
         '- InternLM-XComposer (浦语·灵笔) is a conversational language model that is developed by '

@@ -360,10 +360,10 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = inputs.pop('labels')
 
         loss_kwargs['labels'] = labels
-        print(' === shapes === ')
-        print(inputs[0]['input_ids'].shape)
-        print(inputs[1]['input_ids'].shape)
-        print(inputs[2]['input_ids'].shape)
+        # print(' === shapes === ')
+        # print(inputs[0]['input_ids'].shape)
+        # print(inputs[1]['input_ids'].shape)
+        # print(inputs[2]['input_ids'].shape)
         inputs = inputs[0]
 
         outputs = model(**(inputs))

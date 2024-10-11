@@ -37,7 +37,8 @@ torchrun \
     --ddp_backend nccl \
     --train_dataset_sample -1 \
     --num_train_epochs 1 \
-    --max_length 2048 \
+    --query_max_len 3072 \
+    --response_max_len 1024 \
     --check_dataset_strategy warning \
     --lora_rank 8 \
     --lora_alpha 32 \
