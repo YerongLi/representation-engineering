@@ -295,6 +295,11 @@ def prepare_model_template_train(args, msg: Optional[Dict[str, Any]] = None):
     if args.sequence_parallel_size and args.sequence_parallel_size > 1:
         template_kwargs['sequence_parallel_size'] = args.sequence_parallel_size
     template_kwargs['rescale_image'] = args.rescale_image
+    
+    template_kwargs['query_max_len'] = args.query_max_len
+    template_kwargs['response_max_len'] = args.response_max_len
+    
+    
     template: Template = get_template(
         args.template_type,
         tokenizer,
@@ -342,7 +347,6 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
     if use_torchacc():
         training_args.train_dataset_sample = train_dataset.shape[0] if train_dataset is not None else 0
     
-    # template.default_system = args.pos_type
 
     if val_dataset is None:
         training_args.evaluation_strategy = IntervalStrategy.NO
@@ -404,11 +408,17 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
         # Process the datasets based on the templates
         td0, tkwargs0 = template.encode(train_dataset[0])
         print_example(td0, tokenizer, tkwargs0)
+        pos_template = copy.copy(template)
+        pos_template.default_system = args.pos_type
+        
+        neg_template = copy.copy(template)
+        neg_template.default_system = args.neg_type
+        
         # train_dataset = LazyLLMDataset(train_dataset, template.encode)
-        train_dataset = RepeLazyLLMDataset(train_dataset, template.encode)
+        train_dataset = RepeLazyLLMDataset(train_dataset, template.encode, pos_template.encode, neg_template.encode)
         if val_dataset is not None:
             # val_dataset = LazyLLMDataset(val_dataset, template.encode)
-            val_dataset = RepeLazyLLMDataset(val_dataset, template.encode)
+            val_dataset = RepeLazyLLMDataset(val_dataset, template.encode, pos_template.encode, neg_template.encode)
     if isinstance(msg, dict):
         msg['dataset_info'] = dataset_info
     return train_dataset, val_dataset

@@ -271,11 +271,15 @@ class RepeLazyLLMDataset(Dataset):
 
     def __init__(self,
                  dataset: HfDataset,
-                 encode_func: Callable[[Dict[str, Any]], Union[Tuple[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]],
+                 ori_encode_func: Callable[[Dict[str, Any]], Union[Tuple[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]],
+                 pos_encode_func: Callable[[Dict[str, Any]], Union[Tuple[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]],
+                 neg_encode_func: Callable[[Dict[str, Any]], Union[Tuple[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]],
                  *,
                  try_fetch_time: int = 20) -> None:
         self.dataset = dataset
-        self.encode_func = encode_func
+        self.ori_encode_func = ori_encode_func
+        self.pos_encode_func = pos_encode_func
+        self.neg_encode_func = neg_encode_func
         self.try_fetch_time = min(try_fetch_time, len(self.dataset))
         assert self.try_fetch_time >= 1
 
@@ -294,7 +298,7 @@ class RepeLazyLLMDataset(Dataset):
                 # res = self.encode_func(data)
                 # if isinstance(res, (tuple, list)) and len(res) == 2:
                     # res = res[0]
-                res = {'cons' : [self.encode_func(data)[0], self.encode_func(data)[0], self.encode_func(data)[0]]}
+                res = {'cons' : [self.ori_encode_func(data)[0], self.pos_encode_func(data)[0], self.neg_encode_func(data)[0]]}
                 # res = {'cons' : [ ]}
             except Exception as e:
                 logger.error(f'Error occurs in lazy tokenize: {e}')
