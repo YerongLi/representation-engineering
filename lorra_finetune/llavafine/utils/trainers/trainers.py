@@ -364,7 +364,12 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         # print(inputs[0]['input_ids'].shape)
         # print(inputs[1]['input_ids'].shape)
         # print(inputs[2]['input_ids'].shape)
+        # print('Trainer', inputs[0]['_data'][0].keys())
+        # print(inputs[1]['response_ids'].shape)
+        # print(inputs[2]['response_ids'].shape)
+        
         inputs = inputs[0]
+        
 
         outputs = model(**(inputs))
         if loss_name is not None:

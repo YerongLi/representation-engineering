@@ -2,12 +2,7 @@
 import os
 from transformers import AutoTokenizer
 
-# Construct the path using the environment's home directory
-home_dir = os.path.expanduser("~")  # This resolves to /home/yerong
-tokenizer_path = os.path.join(home_dir, ".cache/modelscope/hub/Shanghai_AI_Laboratory/internlm-xcomposer2-7b/")
 
-# Load the tokenizer from the specified path
-tokenizer = AutoTokenizer.from_pretrained(tokenizer_path,trust_remote_code=True)
 
 import inspect
 import os
@@ -296,6 +291,7 @@ class Template:
                        truncation_strategy: Literal['delete', 'truncation_left'] = 'delete',
                        model: torch.nn.Module = None,
                        **kwargs) -> None:
+        
         assert self._is_init is False, 'The template has been initialized.'
         self.is_multimodal = getattr(tokenizer, 'is_multimodal', None)
         self._is_init = True
@@ -605,7 +601,6 @@ class Template:
         history_roles: Optional[History] = example.get('history_roles')
         system: Optional[str] = example.get('system', None)
         is_multi_modal: bool = any([example.get(key) for key in Template.special_keys])
-
         inputs, tokenizer_kwargs = self._concat_and_tokenize(
             query,
             query_role,
@@ -2230,123 +2225,25 @@ class RepeTemplate(Template):
         assert 'response_max_len' in kwargs, "response_max_len must be provided in kwargs"
         self.query_max_len = kwargs.get('query_max_len')
         self.response_max_len = kwargs.get('response_max_len')
-    
-    def encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        from .utils import to_device
-        print(self.query_max_len, self.response_max_len)
-        example = self.preprocess(example)
-        _encode = self._encode
-        if self._is_lmdeploy or self._is_vllm:
-            assert self.is_multimodal is not None, 'Please use the get_model_tokenizer function.'
-            _encode = MethodType(Template._encode, self)
+
+    def _encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        # Qwen2VLTemplateMixin, InternLMXComposer2Template, LLavaOneVison returns 
+        # inputs, {}
         response = example['response']
         example['response'] = ''
-        res = _encode(example)
-        inputs = res[0]
-        if not self._is_training and '_data' in inputs:
-            data = inputs.pop('_data')
-            data = to_device(data, self.model.device)
-            inputs.update(self._post_encode(self.model, data))
-        return res if not streaming else inputs
-
-class RepeInternLMXComposer2Template(RepeTemplate):
-    INTERNLM_XCOMPOSER_SYSTEM = (
-        'You are an AI assistant whose name is InternLM-XComposer (浦语·灵笔).\n'
-        '- InternLM-XComposer (浦语·灵笔) is a conversational language model that is developed by '
-        'Shanghai AI Laboratory (上海人工智能实验室). '
-        'It is designed to be helpful, honest, and harmless.\n'
-        '- InternLM-XComposer (浦语·灵笔) can understand and communicate fluently in the language chosen '
-        'by the user such as English and 中文.')
-    image_placeholder = ['</s>']
-
-    def __init__(self, version):
-        prefix = ['<s>']
-        prompt = ['[UNUSED_TOKEN_146]user\n{{QUERY}}[UNUSED_TOKEN_145]\n[UNUSED_TOKEN_146]assistant\n']
-        chat_sep = ['[UNUSED_TOKEN_145]\n']
-        suffix = ['[UNUSED_TOKEN_145]']
-        system_prefix = ['<s>[UNUSED_TOKEN_146]system\n{{SYSTEM}}[UNUSED_TOKEN_145]\n']
-        super().__init__(prefix, prompt, chat_sep, suffix, self.INTERNLM_XCOMPOSER_SYSTEM, system_prefix)
-        self.version = version
-
-    def _encode(self, example: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         inputs, _ = super()._encode(example)
-        if len(inputs) == 0:
-            return inputs, {}
-        dtype = self.model.dtype
-        images = example.get('images') or []
-
-        if self.version == 'v2.5':
-            hd_num = 24
-            if len(images) > 1:
-                hd_num = 6
-            hd_num = get_env_args('hd_num', int, hd_num)
-            Image_transform = get_class_from_dynamic_module('ixc_utils.Image_transform', self.tokenizer.model_dir)
-            images = [Image_transform(image, hd_num=hd_num) for image in images]
-        elif self.version == 'v2-4khd':
-            hd_num = 55
-            hd_num = get_env_args('hd_num', int, hd_num)
-            HD_transform = get_class_from_dynamic_module('ixc_utils.HD_transform', self.tokenizer.model_dir)
-            images = [HD_transform(image, hd_num=hd_num) for image in images]
-        images = [self.model.vis_processor(image).to(dtype) for image in images]
-        inputs['_data'] = {'input_ids': inputs['input_ids'], 'labels': inputs['labels'], 'images': images}
+        inputs['_data']['response_ids'] = self.tokenizer(response).input_ids
         return inputs, {}
 
-    def _post_encode(self, model, data: Any) -> Dict[str, Any]:
-        input_ids = data['input_ids']
-        labels = data['labels']
-        images = data['images']
-        if len(images) > 0:  # ignore <s>
-            input_ids = input_ids[1:]
-            if labels is not None:
-                labels = labels[1:]
-        if isinstance(input_ids, torch.Tensor):
-            input_ids = input_ids.tolist()
-        input_ids.append(2)  # add dummy </s>
-        if labels is not None:
-            if isinstance(labels, torch.Tensor):
-                labels = labels.tolist()
-            labels.append(2)
-        else:
-            labels = []
-        res_inputs_embeds = []
-        res_labels = []
-        wrap_im_mask = []
-        pre_i, i, idx = 0, 0, 0
-        device = model.device
-        internlm2_model = model.model
-        if not hasattr(internlm2_model, 'tok_embeddings'):
-            internlm2_model = internlm2_model.model
-        tok_embeddings = internlm2_model.tok_embeddings
-        if len(images) > 0:
-            images = torch.concat([model.img2emb(image[None])[0] for image in images], dim=0)
-        while i < len(input_ids):
-            if input_ids[i] == 2:  # replace_token
-                res_input_ids = torch.tensor([1] + input_ids[pre_i:i], device=device)
-                res_inputs_embeds.append(tok_embeddings(res_input_ids[None])[0])
-                wrap_im_mask += [0] * len(res_input_ids)
-                res_labels += [-100] + labels[pre_i:i]
-                if len(images) > 0 and idx < images.shape[0]:
-                    res_inputs_embeds.append(images[idx].to(device))
-                    wrap_im_mask += [1] * images.shape[1]
-                    res_labels += [-100] * images.shape[1]
-                idx += 1
-                i += 1
-                pre_i = i
-                continue
-            i += 1
-        if len(labels) == 0:
-            res_labels = None
-        res_inputs_embeds = torch.concat(res_inputs_embeds, dim=0)
-        wrap_im_mask = torch.tensor(wrap_im_mask, dtype=torch.bool, device=device)[None]
-        return {'inputs_embeds': res_inputs_embeds, 'im_mask': wrap_im_mask, 'labels': res_labels}
+class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
 
-    @staticmethod
-    def _get_generate_ids(generate_ids: List[int], input_token_len: int) -> List[int]:
-        return generate_ids
-
+    def __init__(self):
+        super().__init__(version='v2')
+        # self.PARENT = InternLMXComposer2Template(version='v2')
+        # print(self.PARENT.truncation_strategy)
     def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
         if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
-            res = [super(RepeInternLMXComposer2Template, self).data_collator([x], padding_to) for x in batch[0]['cons']]
+            res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
             return res
         else:
             res = super().data_collator(batch, padding_to)
@@ -2355,15 +2252,12 @@ class RepeInternLMXComposer2Template(RepeTemplate):
                 im_mask = self.pad_sequence(im_mask, 0, self.padding_side)
                 res['im_mask'] = im_mask
             return res
-            
-
-
-
+        
 # register_template(
 #     TemplateType.internlm_xcomposer2, InternLMXComposer2Template(version='v2'), use_model=True, lazy_tokenize=True)
 
 register_template(
-    TemplateType.internlm_xcomposer2, RepeInternLMXComposer2Template(version='v2'), use_model=True, lazy_tokenize=True)
+    TemplateType.internlm_xcomposer2, RepeInternLMXComposer2Template(), use_model=True, lazy_tokenize=True)
 
 class InternLMXComposer2_5Template(InternLMXComposer2Template):
     INTERNLM_XCOMPOSER_SYSTEM = (

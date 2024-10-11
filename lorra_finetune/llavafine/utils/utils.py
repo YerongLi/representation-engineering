@@ -299,7 +299,7 @@ class RepeLazyLLMDataset(Dataset):
                 # if isinstance(res, (tuple, list)) and len(res) == 2:
                     # res = res[0]
                 res = {'cons' : [self.ori_encode_func(data)[0], self.pos_encode_func(data)[0], self.neg_encode_func(data)[0]]}
-                # res = {'cons' : [ ]}
+                # print(res['cons'][0])
             except Exception as e:
                 logger.error(f'Error occurs in lazy tokenize: {e}')
                 continue
