@@ -31,6 +31,7 @@ from swift.utils import get_dist_setting, get_logger, upper_bound, use_torchacc
 from .vision_utils import (load_audio_qwen, load_batch, load_image, load_video_cogvlm2, load_video_internvl,
                            load_video_llava, load_video_minicpmv_mplug_owl3, load_video_qwen2, rescale_image,
                            transform_image)
+from .exception import MaxLengthExceededError
 cnt = 0
 logger = get_logger()
 
@@ -1091,7 +1092,6 @@ class Template:
         pixel_values_videos = [b['pixel_values_videos'] for b in batch if b.get('pixel_values_videos') is not None]
         if len(pixel_values_videos) > 0:
             res['pixel_values_videos'] = torch.concat(pixel_values_videos)
-        
         return res
 
     @classmethod
@@ -2210,7 +2210,6 @@ class InternLMXComposer2Template(Template):
         return generate_ids
 
 
-# class RepeInternLMXComposer2Template(InternLMXComposer2Template):
 class RepeTemplate(Template):
     def _init_template(self,
                        tokenizer: PreTrainedTokenizerBase,
@@ -2233,24 +2232,40 @@ class RepeTemplate(Template):
         example['response'] = ''
         inputs, _ = super()._encode(example)
         inputs['_data']['response_ids'] = self.tokenizer(response).input_ids
+        # print('respnose_ids  dddd')
         return inputs, {}
 
 class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
 
     def __init__(self):
         super().__init__(version='v2')
-        # self.PARENT = InternLMXComposer2Template(version='v2')
-        # print(self.PARENT.truncation_strategy)
+
+    def _post_encode(self, model, data: Any) -> Dict[str, Any]:
+        res = super()._post_encode(model, data)
+        if res['inputs_embeds'].shape[0] > self.query_max_len:
+            raise MaxLengthExceededError(
+                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {query_max_len}."
+            )
+        pad = torch.ones([1, 1]) * self.tokenizer.pad_token_id
+        pad = pad.long().to(model.device)
+        pad_emb = model.get_input_embeddings()(pad)
+        temp_len = res['inputs_embeds'].shape[0]
+        res_len = self.query_max_len - temp_len
+        print(pad_emb.shape, res['inputs_embeds'].shape, res_len, res['attention_mask'].shape )
+
+        return res
+
     def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
         if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
             res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
             return res
         else:
-            res = super().data_collator(batch, padding_to)
+            res = super().data_collator(batch)
             if 'im_mask' in batch[0]:
                 im_mask = [b['im_mask'][0] for b in batch]
                 im_mask = self.pad_sequence(im_mask, 0, self.padding_side)
                 res['im_mask'] = im_mask
+            
             return res
         
 # register_template(
