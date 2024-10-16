@@ -1,6 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
+import gc
 
 import torch
 from peft import PeftModel
@@ -258,6 +259,8 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         if use_torchacc():
             patch_clip_grad_norm(self.accelerator)
         self.template = None
+        self.alpha = 16
+        
 
     def prediction_step(
         self,
@@ -361,6 +364,7 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = None
 
         return loss, generated_tokens, labels
+    
     def _pre_forward_hook(self, module, kwargs):
         if '_data' in kwargs:
             res_extra = []
@@ -397,8 +401,44 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         
         
         # outputs = model(**(concatenated_inputs[0]))
-        outputs = model(**concatenated_inputs[0], output_hidden_states=True)
-        print(outputs.hidden_states)
-        exit()
-        return (loss, outputs) if return_outputs else loss
+        response_attention_mask = concatenated_inputs['attention_mask'][:, -self.template.response_max_len:].repeat(len(target_layers), 1, 1).unsqueeze(-1)
+
+        module = 'past_key_values' # 'hidden_states
+        with model.disable_adapter():
+            model.eval()
+            with torch.no_grad():
+                orig_outputs = model(
+                    **(concatenated_inputs[0]),
+                    output_hidden_states=True
+                )['hidden_states']
+                orig_hidden = [orig_outputs[l][:, -min_length:].detach() for l in target_layers]
+                pos_outputs = model(
+                    **(concatenated_inputs[1]),
+                    output_hidden_states=True
+                )['hidden_states']
+                neg_outputs = model(
+                    **(concatenated_inputs[2]),
+                    output_hidden_states=True
+                )['hidden_states']
+                direction_hidden = [pos_outputs[l][:, -self.template.response_max_len:].detach() - \
+                                    neg_outputs[l][:, -self.template.response_max_len:].detach() \
+                                    # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
+                                                    for l in target_layers]
+                target_hidden = torch.stack([orig_hidden[i] + self.alpha * direction_hidden[i] for i in range(len(target_layers))]) * response_attention_mask
+
+                del orig_outputs, pos_outputs, neg_outputs, orig_hidden, direction_hidden
+                gc.collect()
+                torch.cuda.empty_cache()
+
+        model.train()
+        lora_outputs = model(
+            **(concatenated_inputs[0]),
+            output_hidden_states=True
+        )['hidden_states']
+        lora_hidden = torch.stack([lora_outputs[l][:, -min_length:] for l in target_layers]) * response_attention_mask
+
+        loss_fct = torch.nn.MSELoss()
+        loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
+        return (loss, lora_hidden) if return_outputs else loss
+
         # return (loss+ torch.tensor(10.0, device=loss.device), outputs) if return_outputs else loss+ torch.tensor(10.0, device=loss.device)
