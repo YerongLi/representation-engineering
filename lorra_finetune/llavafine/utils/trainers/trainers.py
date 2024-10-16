@@ -393,70 +393,12 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
 
         loss_kwargs['labels'] = labels
         
-        self.template.conkat(inputs[0], module)
+        concatenated_inputs = [self.template.conkat(inputs[i], module) for i in range(3)]
+        
+        
+        # outputs = model(**(concatenated_inputs[0]))
+        outputs = model(**concatenated_inputs[0], output_hidden_states=True)
+        print(outputs.hidden_states)
         exit()
-        
-        
-        outputs = model(**(inputs))
-        if loss_name is not None:
-            loss_func = get_loss_func(loss_name)
-            outputs['loss'] = loss_func(outputs, **loss_kwargs)
-
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
-
-        if labels is not None and loss_name is None:
-            unwrapped_model = unwrap_model(model)
-            if is_peft_available() and isinstance(unwrapped_model, PeftModel):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
-            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True)
-            else:
-                loss = self.label_smoother(outputs, labels)
-        else:
-            loss = outputs['loss'] if isinstance(outputs, dict) else outputs[0]
-
-        if labels is None:
-            labels = inputs['labels']
-
-        if self.sequence_parallel_size > 1:
-            from swift.trainers.xtuner import reduce_xtuner_sequence_parallel_loss
-            loss = reduce_xtuner_sequence_parallel_loss(loss, labels)
-
-        if self.is_encoder_decoder:
-            preds = outputs.logits.argmax(dim=2)[..., :] if outputs.logits is not None else None
-            labels = labels[..., :]
-        else:
-            preds = outputs.logits.argmax(dim=2)[..., :-1] if outputs.logits is not None else None
-            labels = labels[..., 1:]
-
-        masks = labels != -100
-        acc_strategy = getattr(self.args, 'acc_strategy', 'token')
-        acc: Optional[torch.Tensor] = None
-        sft_args = getattr(self, 'sft_args', None)
-        acc_steps = 1 if sft_args is None else sft_args.acc_steps
-        if self.state.global_step % acc_steps == 0 and preds is not None:
-            if preds.shape != labels.shape:
-                pass
-            elif acc_strategy == 'sentence':
-                acc_list = []
-                for i, m in enumerate(masks):
-                    acc_list.append(torch.all(preds[i, m] == labels[i, m]).to(torch.int64).item())
-                acc = torch.tensor(acc_list, device=preds.device).float().mean()
-            else:
-                if use_torchacc():
-                    ta_trim_graph()
-                    preds = preds.to('cpu')
-                    masks = masks.to('cpu')
-                    labels = labels.to('cpu')
-                acc = (torch.masked_select(preds, masks) == torch.masked_select(labels, masks)).float().mean()
-            if model.training and acc is not None:
-                if 'acc' not in self._custom_metrics:
-                    self._custom_metrics['acc'] = self._acc
-                self._custom_metrics['acc'] = self._custom_metrics['acc'] + acc / self.args.gradient_accumulation_steps
         return (loss, outputs) if return_outputs else loss
         # return (loss+ torch.tensor(10.0, device=loss.device), outputs) if return_outputs else loss+ torch.tensor(10.0, device=loss.device)

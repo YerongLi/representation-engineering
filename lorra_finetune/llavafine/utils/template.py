@@ -2230,8 +2230,6 @@ class RepeTemplate(Template):
         if '_data' in kwargs:
             res_extra = []
             data = kwargs.pop('_data')
-            print('data[0] variable keys')
-            print(data[0].keys())
             for d in data:
                 res_extra.append(self._post_encode(module, d))
             kwargs.update(to_device(self.data_collator(res_extra), module.device))
