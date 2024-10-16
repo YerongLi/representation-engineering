@@ -21,6 +21,24 @@ from swift.trainers.mixin import SwiftMixin
 # from .push_to_ms import PushToMsHubMixin
 from swift.trainers.push_to_ms import PushToMsHubMixin
 
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Set, Tuple, Union
+
+def to_device(inputs: Any, device: torch.device) -> Any:
+    if callable(getattr(inputs, 'to', None)):
+        return inputs.to(device=device)
+
+    if isinstance(inputs, Mapping):
+        res = {}
+        for k, v in inputs.items():
+            res[k] = to_device(v, device)
+    elif isinstance(inputs, Sequence) and not isinstance(inputs, str):
+        res = []
+        for b in inputs:
+            res.append(to_device(b, device))
+    else:
+        res = inputs
+    return res
+
 
 class Trainer(PushToMsHubMixin, SwiftMixin, HfTrainer):
     pass
@@ -239,6 +257,7 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         self._acc = torch.tensor(0.).to(self.args.device)
         if use_torchacc():
             patch_clip_grad_norm(self.accelerator)
+        self.template = None
 
     def prediction_step(
         self,
@@ -342,11 +361,24 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = None
 
         return loss, generated_tokens, labels
+    def _pre_forward_hook(self, module, kwargs):
+        if '_data' in kwargs:
+            res_extra = []
+            data = kwargs.pop('_data')
+            print('data keys')
+            print(data[0].keys())
+            for d in data:
+                res_extra.append(self.template._post_encode(module, d))
+            kwargs.update(to_device(self.template.data_collator(res_extra), module.device))
+            if 'inputs_embeds' in kwargs:
+                kwargs.pop('input_ids', None)
+            if 'response' in data[0]: ## DEBUG batch size can be greater than 1
+                kwargs['response'] = data[0]['response']
 
     def compute_loss(self, model, inputs, return_outputs=None):
         if not hasattr(self, '_custom_metrics'):
             self._custom_metrics = {}
-
+        module = model.module
         labels = None
         loss_name = self.args.loss_name
         if loss_name is None and 'loss_scale' in inputs:
@@ -360,17 +392,11 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = inputs.pop('labels')
 
         loss_kwargs['labels'] = labels
-        # print(' === shapes === ')
-        # print(inputs[0]['input_ids'].shape)
-        # print(inputs[1]['input_ids'].shape)
-        # print(inputs[2]['input_ids'].shape)
-        # print('Trainer', inputs[0]['_data'][0].keys())
-        # print(inputs[1]['response_ids'].shape)
-        # print(inputs[2]['response_ids'].shape)
         
-        inputs = inputs[0]
+        self.template.conkat(inputs[0], module)
+        exit()
         
-
+        
         outputs = model(**(inputs))
         if loss_name is not None:
             loss_func = get_loss_func(loss_name)

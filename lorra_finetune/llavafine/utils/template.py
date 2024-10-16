@@ -2224,15 +2224,45 @@ class RepeTemplate(Template):
         assert 'response_max_len' in kwargs, "response_max_len must be provided in kwargs"
         self.query_max_len = kwargs.get('query_max_len')
         self.response_max_len = kwargs.get('response_max_len')
+    
+    def _pre_forward_hook(self, module, args, kwargs):
+        from .utils import to_device
+        if '_data' in kwargs:
+            res_extra = []
+            data = kwargs.pop('_data')
+            print('data[0] variable keys')
+            print(data[0].keys())
+            for d in data:
+                res_extra.append(self._post_encode(module, d))
+            kwargs.update(to_device(self.data_collator(res_extra), module.device))
+            if 'inputs_embeds' in kwargs:
+                kwargs.pop('input_ids', None)
 
+        if isinstance(module, PeftModel):
+            parameters = inspect.signature(module.base_model.model.forward).parameters
+        else:
+            parameters = inspect.signature(module.forward).parameters
+
+        if 'position_ids' not in parameters:
+            kwargs.pop('position_ids', None)
+        if 'response' in data[0]: # DEBUG : Temporary
+            kwargs['response'] = data[0]['response']
+        return args, kwargs
+    
     def _encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         # Qwen2VLTemplateMixin, InternLMXComposer2Template, LLavaOneVison returns 
         # inputs, {}
         response = example['response']
         example['response'] = ''
         inputs, _ = super()._encode(example)
-        inputs['_data']['response_ids'] = self.tokenizer(response).input_ids
-        # print('respnose_ids  dddd')
+        
+        inputs['_data']['response'] = self.tokenizer(
+            response,
+            padding='max_length',
+            truncation=True,  # Truncate if response exceeds max length
+            max_length=self.response_max_len,
+            return_tensors='pt'
+        )
         return inputs, {}
 
 class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
@@ -2242,17 +2272,36 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
 
     def _post_encode(self, model, data: Any) -> Dict[str, Any]:
         res = super()._post_encode(model, data)
-        if res['inputs_embeds'].shape[0] > self.query_max_len:
+        temp_len = res['inputs_embeds'].shape[0]
+        if  temp_len> self.query_max_len:
             raise MaxLengthExceededError(
                 f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {query_max_len}."
             )
-        pad = torch.ones([1, 1]) * self.tokenizer.pad_token_id
-        pad = pad.long().to(model.device)
-        pad_emb = model.get_input_embeddings()(pad)
-        temp_len = res['inputs_embeds'].shape[0]
+        # Get the input embeddings for the padding token, assume pad shape is [1]
+        pad_emb = model.get_input_embeddings()(torch.tensor([self.tokenizer.pad_token_id]).to(model.device)) # Shape: [1, 4096]
+        # Extract current embeddings and im_mask
+        inputs_embeds = res['inputs_embeds']         # Shape: [current_len, 4096]
+        im_mask = res['im_mask']                     # Shape: [current_len]
+        # res.pop('inputs_embeds')
         res_len = self.query_max_len - temp_len
-        print(pad_emb.shape, res['inputs_embeds'].shape, res_len, res['attention_mask'].shape )
+        
+        # Expand eos_embedding to the required padding length
+        pad_emb = pad_emb.expand(res_len, -1).to(model.device)  # Shape: [res_len, 4096]
 
+        # Right-pad the inputs_embeds by concatenating eos embeddings
+        padded_inputs_embeds = torch.cat([inputs_embeds, pad_emb], dim=0)  # Shape: [query_max_len, 4096]
+
+        # Create padded attention_mask (extend with zeros)
+        attention_mask = torch.cat([torch.ones(1, temp_len), torch.zeros(1, res_len)], dim=1).to(model.device)  # Shape: [query_max_len]
+        # Right-pad the im_mask with zeros to match the new length
+        padded_im_mask = torch.cat([im_mask, torch.zeros((1, res_len), dtype=torch.bool).to(model.device)], dim=1)  # Shape: [1, query_max_len]
+        padded_target =res['labels'] + [-100] * res_len  # Shape: [1, query_max_len]
+        
+        # Update the res dictionary
+        res['inputs_embeds'] = padded_inputs_embeds
+        res['attention_mask'] = attention_mask
+        res['im_mask'] = padded_im_mask
+        res['labels'] = padded_target
         return res
 
     def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
@@ -2265,9 +2314,26 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
                 im_mask = [b['im_mask'][0] for b in batch]
                 im_mask = self.pad_sequence(im_mask, 0, self.padding_side)
                 res['im_mask'] = im_mask
-            
+            if 'attention_mask' in batch[0]:
+                res['attention_mask'] = batch[0]['attention_mask']
             return res
+    
+    def conkat(self, inputs, module):
+
+        super()._pre_forward_hook(module, {}, inputs)
+        response_embeddings = module.get_input_embeddings()(inputs['response'].input_ids)
+        concatenated_embeddings = torch.cat((inputs['inputs_embeds'], response_embeddings), dim=1)
+        del response_embeddings
+        concatenated_mask = torch.cat((inputs['attention_mask'], inputs['response']['attention_mask']), dim=1)
+        concatenated_im_mask = F.pad(inputs['im_mask'], (0, inputs['response']['attention_mask'].shape[1]), value=False)
         
+        assert torch.equal(concatenated_im_mask[:, :inputs['im_mask'].shape[1]], inputs['im_mask']), "The first part does not match the original im_mask."
+        # Assert the second part is all False
+        assert torch.all(concatenated_im_mask[:, inputs['im_mask'].shape[1]:] == False), "The second part is not all False."
+        del inputs
+        return {'inputs_embeds': concatenated_embeddings,
+                'attention_mask': concatenated_mask,
+                'im_mask': concatenated_im_mask}
 # register_template(
 #     TemplateType.internlm_xcomposer2, InternLMXComposer2Template(version='v2'), use_model=True, lazy_tokenize=True)
 
