@@ -2261,6 +2261,7 @@ class RepeTemplate(Template):
             max_length=self.response_max_len,
             return_tensors='pt'
         )
+        
         return inputs, {}
 
 class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
@@ -2273,7 +2274,7 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
         temp_len = res['inputs_embeds'].shape[0]
         if  temp_len> self.query_max_len:
             raise MaxLengthExceededError(
-                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {query_max_len}."
+                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {self.query_max_len}."
             )
         # Get the input embeddings for the padding token, assume pad shape is [1]
         pad_emb = model.get_input_embeddings()(torch.tensor([self.tokenizer.pad_token_id]).to(model.device)) # Shape: [1, 4096]

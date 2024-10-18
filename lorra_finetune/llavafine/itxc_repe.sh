@@ -37,8 +37,8 @@ torchrun \
     --ddp_backend nccl \
     --train_dataset_sample -1 \
     --num_train_epochs 1 \
-    --query_max_len 3072 \
-    --response_max_len 1024 \
+    --query_max_len 365 \
+    --response_max_len 124 \
     --check_dataset_strategy warning \
     --lora_rank 8 \
     --lora_alpha 32 \
@@ -50,8 +50,8 @@ torchrun \
     --gradient_accumulation_steps $(expr 16 / $nproc_per_node) \
     --max_grad_norm 0.5 \
     --warmup_ratio 0.03 \
-    --eval_steps 100 \
-    --save_steps 100 \
+    --eval_steps 1 \
+    --save_steps 4 \
     --save_total_limit 2 \
     --logging_steps 10 \
     --use_flash_attn false \

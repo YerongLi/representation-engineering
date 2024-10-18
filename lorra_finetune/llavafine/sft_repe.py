@@ -556,6 +556,8 @@ def get_sft_main(args, llm):
         import torch_xla.runtime as xr
         xla_cache_path = os.getenv('TORCHACC_CACHE_PATH')
         read_only = strtobool(os.getenv('TORCHACC_CACHE_PATH_READ_ONLY', '0'))
+        args.max_length = args.query_max_len + args.response_max_len
+        
         suffix = f'_rank{xr.global_ordinal()}'
         if xla_cache_path and not xla_cache_path.endswith(suffix):
             xr.initialize_cache(xla_cache_path + suffix, readonly=read_only)

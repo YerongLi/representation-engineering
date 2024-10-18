@@ -23,7 +23,8 @@ from swift.trainers.mixin import SwiftMixin
 from swift.trainers.push_to_ms import PushToMsHubMixin
 
 from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Set, Tuple, Union
-
+from lengthtrainer import LengthTrainer
+# DEBUG : use to_device in the utils
 def to_device(inputs: Any, device: torch.device) -> Any:
     if callable(getattr(inputs, 'to', None)):
         return inputs.to(device=device)
@@ -244,7 +245,7 @@ class Seq2SeqTrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         return (loss, outputs) if return_outputs else loss
 
 
-class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
+class RETrainer(LengthTrainer, PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -260,6 +261,7 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             patch_clip_grad_norm(self.accelerator)
         self.template = None
         self.alpha = 16
+        self.target_layers = [10, 12, 14, 16, 18, 20]
         
 
     def prediction_step(
@@ -365,19 +367,6 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
 
         return loss, generated_tokens, labels
     
-    def _pre_forward_hook(self, module, kwargs):
-        if '_data' in kwargs:
-            res_extra = []
-            data = kwargs.pop('_data')
-            print('data keys')
-            print(data[0].keys())
-            for d in data:
-                res_extra.append(self.template._post_encode(module, d))
-            kwargs.update(to_device(self.template.data_collator(res_extra), module.device))
-            if 'inputs_embeds' in kwargs:
-                kwargs.pop('input_ids', None)
-            if 'response' in data[0]: ## DEBUG batch size can be greater than 1
-                kwargs['response'] = data[0]['response']
 
     def compute_loss(self, model, inputs, return_outputs=None):
         if not hasattr(self, '_custom_metrics'):
@@ -398,10 +387,8 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         loss_kwargs['labels'] = labels
         
         concatenated_inputs = [self.template.conkat(inputs[i], module) for i in range(3)]
-        
-        
-        # outputs = model(**(concatenated_inputs[0]))
-        response_attention_mask = concatenated_inputs['attention_mask'][:, -self.template.response_max_len:].repeat(len(target_layers), 1, 1).unsqueeze(-1)
+                
+        response_attention_mask = concatenated_inputs[0]['attention_mask'][:, -self.template.response_max_len:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
 
         module = 'past_key_values' # 'hidden_states
         with model.disable_adapter():
@@ -411,7 +398,7 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
                     **(concatenated_inputs[0]),
                     output_hidden_states=True
                 )['hidden_states']
-                orig_hidden = [orig_outputs[l][:, -min_length:].detach() for l in target_layers]
+                orig_hidden = [orig_outputs[l][:, -self.template.response_max_len:].detach() for l in self.target_layers]
                 pos_outputs = model(
                     **(concatenated_inputs[1]),
                     output_hidden_states=True
@@ -423,8 +410,8 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
                 direction_hidden = [pos_outputs[l][:, -self.template.response_max_len:].detach() - \
                                     neg_outputs[l][:, -self.template.response_max_len:].detach() \
                                     # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
-                                                    for l in target_layers]
-                target_hidden = torch.stack([orig_hidden[i] + self.alpha * direction_hidden[i] for i in range(len(target_layers))]) * response_attention_mask
+                                                    for l in self.target_layers]
+                target_hidden = torch.stack([orig_hidden[i] + self.alpha * direction_hidden[i] for i in range(len(self.target_layers))]) * response_attention_mask
 
                 del orig_outputs, pos_outputs, neg_outputs, orig_hidden, direction_hidden
                 gc.collect()
@@ -435,10 +422,15 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             **(concatenated_inputs[0]),
             output_hidden_states=True
         )['hidden_states']
-        lora_hidden = torch.stack([lora_outputs[l][:, -min_length:] for l in target_layers]) * response_attention_mask
+        lora_hidden = torch.stack([lora_outputs[l][:, -self.template.response_max_len:] for l in self.target_layers]) * response_attention_mask
 
         loss_fct = torch.nn.MSELoss()
         loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
         return (loss, lora_hidden) if return_outputs else loss
 
-        # return (loss+ torch.tensor(10.0, device=loss.device), outputs) if return_outputs else loss+ torch.tensor(10.0, device=loss.device)
+    
+    def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
+        # print(eval_dataset)
+        print(f"Query Max Length: {self.template.query_max_len}")
+        print(f"Response Max Length: {self.template.response_max_len}")        
+        print(f"Response Max Length: {self.model.module.max_length}")
