@@ -1201,7 +1201,58 @@ register_template(
              DEFAULT_SYSTEM, ['{{SYSTEM}}\n\n'],
              auto_add_bos=True))
 
+class RepeTemplate(Template):
+    def _init_template(self,
+                       tokenizer: PreTrainedTokenizerBase,
+                       default_system: Optional[str] = None,
+                       max_length: Optional[int] = None,
+                       truncation_strategy: Literal['delete', 'truncation_left'] = 'delete',
+                       model: torch.nn.Module = None,
+                       **kwargs) -> None:
+        # Call the parent class's __init_template__ method
+        super()._init_template(tokenizer, default_system, max_length, truncation_strategy, model, **kwargs)
+        assert 'query_max_len' in kwargs, "query_max_len must be provided in kwargs"
+        assert 'response_max_len' in kwargs, "response_max_len must be provided in kwargs"
+        self.query_max_len = kwargs.get('query_max_len')
+        self.response_max_len = kwargs.get('response_max_len')
+    
+    def _pre_forward_hook(self, module, args, kwargs):
+        from .utils import to_device
+        if '_data' in kwargs:
+            res_extra = []
+            data = kwargs.pop('_data')
+            for d in data:
+                res_extra.append(self._post_encode(module, d))
+            kwargs.update(to_device(self.data_collator(res_extra), module.device))
+            if 'inputs_embeds' in kwargs:
+                kwargs.pop('input_ids', None)
 
+        if isinstance(module, PeftModel):
+            parameters = inspect.signature(module.base_model.model.forward).parameters
+        else:
+            parameters = inspect.signature(module.forward).parameters
+
+        if 'position_ids' not in parameters:
+            kwargs.pop('position_ids', None)
+        if 'response' in data[0]: # DEBUG : Temporary
+            kwargs['response'] = data[0]['response']
+        return args, kwargs
+    
+    def _encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        # Qwen2VLTemplateMixin, InternLMXComposer2Template, LLavaOneVison returns 
+        # inputs, {}
+        response = example['response']
+        example['response'] = ''
+        inputs, _ = super()._encode(example)
+        inputs['_data']['response'] = self.tokenizer(
+            response,
+            padding='max_length',
+            truncation=True,  # Truncate if response exceeds max length
+            max_length=self.response_max_len,
+            return_tensors='pt'
+        )
+        
+        return inputs, {}
 # You can set the query as '' to serve as a template for pre-training.
 class DefaultGenerationTemplate(Template):
 
@@ -1240,6 +1291,7 @@ class QwenTemplateMixin(ChatmlTemplateMixin):
 
 class QwenTemplate(QwenTemplateMixin, Template):
     pass
+
 
 
 class _QwenVLTemplateMixin:
@@ -1491,11 +1543,13 @@ class _Qwen2VLTemplateMixin:
         images = example.get('images') or []
         videos = example.get('videos') or []
         for media_type in ['images', 'videos']:
+
             if locals()[media_type]:
                 if media_type == 'images':
                     media_token = 151655
                     media_inputs = processor.image_processor(images=images, videos=None, return_tensors='pt')
                     media_grid_thw = media_inputs['image_grid_thw']
+
                 else:
                     media_inputs = processor.image_processor(images=None, videos=videos, return_tensors='pt')
                     media_grid_thw = media_inputs['video_grid_thw']
@@ -1536,10 +1590,12 @@ class _Qwen2VLTemplateMixin:
             pixel_values = pixel_values.type(model.visual.get_dtype())
             image_embeds = model.visual(pixel_values, grid_thw=media_inputs['image_grid_thw'])
             inputs_embeds += image_embeds.mean() * 0.
+            print({'inputs_embeds': inputs_embeds[0]})
             return {'inputs_embeds': inputs_embeds[0]}
         return {}
 
     def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
+
         res = super().data_collator(batch, padding_to)
         for media_type in ['image', 'video']:
             grid_thw = [b[f'{media_type}_grid_thw'] for b in batch if b.get(f'{media_type}_grid_thw') is not None]
@@ -1552,118 +1608,86 @@ class _Qwen2VLTemplateMixin:
             res['position_ids'] = position_ids.contiguous()
         return res
 
-class Repe_Qwen2VLTemplateMixin:
-
-    def replace_tag(self, media_type: Literal['image', 'video', 'audio'], index: int,
-                    example: Dict[str, Any]) -> List[Context]:
-        assert media_type in {'image', 'video'}
-        if media_type == 'image':
-            example['images'][index] = _process_image_qwen(example['images'][index])
-            return ['<|vision_start|><|image_pad|><|vision_end|>']
-        else:
-            example['videos'][index] = load_video_qwen2(example['videos'][index])
-            return ['<|vision_start|><|video_pad|><|vision_end|>']
-
-    def replace_object(self, index: int, example: Dict[str, Any]) -> List[Context]:
-        objects = example.get('objects')
-        if objects:
-            object_ = objects[index]
-            return ['<|object_ref_start|>', object_['caption'], '<|object_ref_end|>']
-        else:
-            return ['<ref-object>']
-
-    def replace_box(self, index: int, example: Dict[str, Any]) -> List[Context]:
-        objects = example.get('objects')
-        if objects:
-            object_ = objects[index]
-            if isinstance(object_['bbox'][0], list):
-                all_objects = ''
-                for sub_object in object_['bbox']:
-                    all_objects += (f'<|box_start|>({sub_object[0]},{sub_object[1]}),'
-                                    f'({sub_object[2]},{sub_object[3]})<|box_end|>')
-                return [all_objects]
-            else:
-                return [
-                    f'<|box_start|>({object_["bbox"][0]},{object_["bbox"][1]}),'
-                    f'({object_["bbox"][2]},{object_["bbox"][3]})<|box_end|>'
-                ]
-        else:
-            return ['<bbox>']
-
-    def _encode(self, example: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        inputs, _ = super()._encode(example)
-        if len(inputs) == 0:
-            return inputs, {}
-        processor = self.tokenizer.processor
-        input_ids = inputs['input_ids']
-        labels = inputs['labels']
-        images = example.get('images') or []
-        videos = example.get('videos') or []
-        for media_type in ['images', 'videos']:
-            if locals()[media_type]:
-                if media_type == 'images':
-                    media_token = 151655
-                    media_inputs = processor.image_processor(images=images, videos=None, return_tensors='pt')
-                    media_grid_thw = media_inputs['image_grid_thw']
-                else:
-                    media_inputs = processor.image_processor(images=None, videos=videos, return_tensors='pt')
-                    media_grid_thw = media_inputs['video_grid_thw']
-                    media_token = 151656
-                idx_list = _findall(input_ids, media_token)
-                added_tokens_len = 0
-                for i, idx in enumerate(idx_list):
-                    merge_length = processor.image_processor.merge_size**2
-                    token_len = (media_grid_thw[i].prod() // merge_length)
-                    input_ids = input_ids[:idx
-                                          + added_tokens_len] + [media_token] * token_len + input_ids[added_tokens_len
-                                                                                                      + idx + 1:]
-                    if labels:
-                        labels = labels[:idx + added_tokens_len] + [-100] * token_len + labels[added_tokens_len + idx
-                                                                                               + 1:]
-                    added_tokens_len += token_len - 1
-                inputs.update(media_inputs)
-
-        inputs['input_ids'] = input_ids
-        inputs['labels'] = labels
-        inputs['_data'] = {'plain_text': not images and not videos, 'input_ids': torch.tensor(input_ids)[None]}
-        return inputs, {}
-
-    def _post_encode(self, model, data: Any) -> Dict[str, Any]:
-        plain_text = data.pop('plain_text', False)
-        if is_deepspeed_enabled() and plain_text:
-            from PIL import Image
-            images = [Image.new('RGB', (32, 32), (0, 0, 0))]
-            processor = self.tokenizer.processor
-            media_inputs = processor.image_processor(images=images, videos=None, return_tensors='pt')
-            input_ids = data['input_ids']
-            device = input_ids.device
-            pixel_values = media_inputs['pixel_values'].to(device)
-            _model = model.model
-            if not hasattr(_model, 'embed_tokens'):
-                _model = _model.model  # LoRA
-            inputs_embeds = _model.embed_tokens(input_ids)
-            pixel_values = pixel_values.type(model.visual.get_dtype())
-            image_embeds = model.visual(pixel_values, grid_thw=media_inputs['image_grid_thw'])
-            inputs_embeds += image_embeds.mean() * 0.
-            return {'inputs_embeds': inputs_embeds[0]}
-        return {}
+class RepeQwen2VLTemplate(RepeTemplate, _Qwen2VLTemplateMixin, QwenTemplate):
 
     def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
-        res = super().data_collator(batch, padding_to)
-        for media_type in ['image', 'video']:
-            grid_thw = [b[f'{media_type}_grid_thw'] for b in batch if b.get(f'{media_type}_grid_thw') is not None]
-            if grid_thw:
-                res[f'{media_type}_grid_thw'] = torch.concat(grid_thw)
-        if 'input_ids' in res:
-            # fix https://github.com/huggingface/transformers/pull/33487
-            position_ids, _ = self.model.get_rope_index(res['input_ids'], res.get('image_grid_thw'),
-                                                        res.get('video_grid_thw'), res['attention_mask'])
-            res['position_ids'] = position_ids.contiguous()
-        return res
+        if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
+            res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
+            return res
+        else:
+            res = super().data_collator(batch, padding_to)
+            for media_type in ['image', 'video']:
+                grid_thw = [b[f'{media_type}_grid_thw'] for b in batch if b.get(f'{media_type}_grid_thw') is not None]
+                if grid_thw:
+                    res[f'{media_type}_grid_thw'] = torch.concat(grid_thw)
+            if 'input_ids' in res:
+                # fix https://github.com/huggingface/transformers/pull/33487
+                position_ids, _ = self.model.get_rope_index(res['input_ids'], res.get('image_grid_thw'),
+                                                            res.get('video_grid_thw'), res['attention_mask'])
+                res['position_ids'] = position_ids.contiguous()
+            return res
         
-class RepeQwen2VLTemplate(Repe_Qwen2VLTemplateMixin, QwenTemplate):
-    pass
+    def conkat(self, inputs, module):
+        super()._pre_forward_hook(module, {}, inputs) # Ignored
+        
+        image_grid_thw = inputs.pop('image_grid_thw', None)
+        pixel_values = inputs.pop('pixel_values')
+        input_ids = inputs.pop('input_ids')  # Add this line to retrieve input_ids
+        pixel_values_videos = inputs.pop('pixel_values_videos', None)
+        attention_mask = inputs.pop('attention_mask', None)
 
+        inputs_embeds = None
+        if inputs_embeds is None:
+            inputs_embeds = module.model.model.embed_tokens(input_ids)
+            if pixel_values is not None:
+                pixel_values = pixel_values.type(module.visual.get_dtype())
+                image_embeds = module.visual(pixel_values, grid_thw=image_grid_thw)
+                image_mask = (input_ids == module.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+            if pixel_values_videos is not None:
+                pixel_values_videos = pixel_values_videos.type(module.visual.get_dtype())
+                video_embeds = module.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                video_mask = (input_ids == module.config.video_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
+        
+        temp_len = inputs_embeds.shape[1]
+        if  temp_len> self.query_max_len:
+            raise MaxLengthExceededError(
+                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {self.query_max_len}."
+            )
+        inputs['inputs_embeds'] = inputs_embeds
+        # Extract current embeddings and im_mask
+        res_len = self.query_max_len - temp_len
+        # Get the input embeddings for the padding token, assume pad shape is [1]
+        pad_emb = module.get_input_embeddings()(torch.tensor([self.tokenizer.pad_token_id]).to(module.device)) # Shape: 
+        inputs['inputs_embeds'] = torch.cat([inputs['inputs_embeds'], pad_emb.repeat(1, res_len).view(1, res_len, pad_emb.shape[1])], dim=1)  # Shape: [1, query_max_len, shape[1]]
+
+        # Create padded attention_mask (extend with zeros)
+        inputs['attention_mask'] = torch.cat([torch.ones(1, temp_len), torch.zeros(1, res_len)], dim=1).to(module.device)  # Shape: [query_max_len]
+        # Right-pad the im_mask with zeros to match the new length
+        # inputs['im_mask'] = torch.cat([inputs['im_mask'], torch.zeros((1, res_len), dtype=torch.bool).to(module.device)], dim=1)  # Shape: [1, query_max_len]
+        inputs['labels'] = torch.cat([inputs['labels'], torch.tensor([[-100] * res_len]).to(inputs['labels'].device)], dim=1)  # Shape: [1, query_max_len]
+
+
+        response_embeddings = module.get_input_embeddings()(inputs['response'].input_ids)
+        concatenated_embeddings = torch.cat((inputs['inputs_embeds'], response_embeddings), dim=1)
+        del response_embeddings
+        concatenated_mask = torch.cat((inputs['attention_mask'], inputs['response']['attention_mask']), dim=1)
+        # concatenated_im_mask = F.pad(inputs['im_mask'], (0, inputs['response']['attention_mask'].shape[1]), value=False)
+
+        # assert torch.equal(concatenated_im_mask[:, :inputs['im_mask'].shape[1]], inputs['im_mask']), "The first part does not match the original im_mask."
+        # Assert the second part is all False
+        # assert torch.all(concatenated_im_mask[:, inputs['im_mask'].shape[1]:] == False), "The second part is not all False."
+        del inputs
+        return {'inputs_embeds': concatenated_embeddings,
+                'attention_mask': concatenated_mask}
+        
 class Qwen2VLTemplate(_Qwen2VLTemplateMixin, QwenTemplate):
     pass
 
@@ -2210,98 +2234,10 @@ class InternLMXComposer2Template(Template):
         return generate_ids
 
 
-class RepeTemplate(Template):
-    def _init_template(self,
-                       tokenizer: PreTrainedTokenizerBase,
-                       default_system: Optional[str] = None,
-                       max_length: Optional[int] = None,
-                       truncation_strategy: Literal['delete', 'truncation_left'] = 'delete',
-                       model: torch.nn.Module = None,
-                       **kwargs) -> None:
-        # Call the parent class's __init_template__ method
-        super()._init_template(tokenizer, default_system, max_length, truncation_strategy, model, **kwargs)
-        assert 'query_max_len' in kwargs, "query_max_len must be provided in kwargs"
-        assert 'response_max_len' in kwargs, "response_max_len must be provided in kwargs"
-        self.query_max_len = kwargs.get('query_max_len')
-        self.response_max_len = kwargs.get('response_max_len')
-    
-    def _pre_forward_hook(self, module, args, kwargs):
-        from .utils import to_device
-        if '_data' in kwargs:
-            res_extra = []
-            data = kwargs.pop('_data')
-            for d in data:
-                res_extra.append(self._post_encode(module, d))
-            kwargs.update(to_device(self.data_collator(res_extra), module.device))
-            if 'inputs_embeds' in kwargs:
-                kwargs.pop('input_ids', None)
-
-        if isinstance(module, PeftModel):
-            parameters = inspect.signature(module.base_model.model.forward).parameters
-        else:
-            parameters = inspect.signature(module.forward).parameters
-
-        if 'position_ids' not in parameters:
-            kwargs.pop('position_ids', None)
-        if 'response' in data[0]: # DEBUG : Temporary
-            kwargs['response'] = data[0]['response']
-        return args, kwargs
-    
-    def _encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        # Qwen2VLTemplateMixin, InternLMXComposer2Template, LLavaOneVison returns 
-        # inputs, {}
-        response = example['response']
-        example['response'] = ''
-        inputs, _ = super()._encode(example)
-        
-        inputs['_data']['response'] = self.tokenizer(
-            response,
-            padding='max_length',
-            truncation=True,  # Truncate if response exceeds max length
-            max_length=self.response_max_len,
-            return_tensors='pt'
-        )
-        
-        return inputs, {}
-
 class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
 
     def __init__(self):
         super().__init__(version='v2')
-
-    def _post_encode(self, model, data: Any) -> Dict[str, Any]:
-        res = super()._post_encode(model, data)
-        temp_len = res['inputs_embeds'].shape[0]
-        if  temp_len> self.query_max_len:
-            raise MaxLengthExceededError(
-                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {self.query_max_len}."
-            )
-        # Get the input embeddings for the padding token, assume pad shape is [1]
-        pad_emb = model.get_input_embeddings()(torch.tensor([self.tokenizer.pad_token_id]).to(model.device)) # Shape: [1, 4096]
-        # Extract current embeddings and im_mask
-        inputs_embeds = res['inputs_embeds']         # Shape: [current_len, 4096]
-        im_mask = res['im_mask']                     # Shape: [current_len]
-        # res.pop('inputs_embeds')
-        res_len = self.query_max_len - temp_len
-        
-        # Expand eos_embedding to the required padding length
-        pad_emb = pad_emb.expand(res_len, -1).to(model.device)  # Shape: [res_len, 4096]
-
-        # Right-pad the inputs_embeds by concatenating eos embeddings
-        padded_inputs_embeds = torch.cat([inputs_embeds, pad_emb], dim=0)  # Shape: [query_max_len, 4096]
-
-        # Create padded attention_mask (extend with zeros)
-        attention_mask = torch.cat([torch.ones(1, temp_len), torch.zeros(1, res_len)], dim=1).to(model.device)  # Shape: [query_max_len]
-        # Right-pad the im_mask with zeros to match the new length
-        padded_im_mask = torch.cat([im_mask, torch.zeros((1, res_len), dtype=torch.bool).to(model.device)], dim=1)  # Shape: [1, query_max_len]
-        padded_target =res['labels'] + [-100] * res_len  # Shape: [1, query_max_len]
-        
-        # Update the res dictionary
-        res['inputs_embeds'] = padded_inputs_embeds
-        res['attention_mask'] = attention_mask
-        res['im_mask'] = padded_im_mask
-        res['labels'] = padded_target
-        return res
 
     def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
         if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
@@ -2318,17 +2254,34 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
             return res
     
     def conkat(self, inputs, module):
-
         super()._pre_forward_hook(module, {}, inputs)
+        # Extract current embeddings and im_mask
+        temp_len = inputs['inputs_embeds'].shape[1]
+        if  temp_len> self.query_max_len:
+            raise MaxLengthExceededError(
+                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {self.query_max_len}."
+            )
+        res_len = self.query_max_len - temp_len
+        # Get the input embeddings for the padding token, assume pad shape is [1]
+        pad_emb = module.get_input_embeddings()(torch.tensor([self.tokenizer.pad_token_id]).to(module.device)) # Shape: [1, 4096]
+        inputs['inputs_embeds'] = torch.cat([inputs['inputs_embeds'], pad_emb.repeat(1, res_len).view(1, res_len, pad_emb.shape[1])], dim=1)  # Shape: [1, query_max_len, 4096]
+
+        # Create padded attention_mask (extend with zeros)
+        inputs['attention_mask'] = torch.cat([torch.ones(1, temp_len), torch.zeros(1, res_len)], dim=1).to(module.device)  # Shape: [query_max_len]
+        # Right-pad the im_mask with zeros to match the new length
+        inputs['im_mask'] = torch.cat([inputs['im_mask'], torch.zeros((1, res_len), dtype=torch.bool).to(module.device)], dim=1)  # Shape: [1, query_max_len]
+        inputs['labels'] = torch.cat([inputs['labels'], torch.tensor([[-100] * res_len]).to(inputs['labels'].device)], dim=1)  # Shape: [1, query_max_len]
+
+
         response_embeddings = module.get_input_embeddings()(inputs['response'].input_ids)
         concatenated_embeddings = torch.cat((inputs['inputs_embeds'], response_embeddings), dim=1)
         del response_embeddings
         concatenated_mask = torch.cat((inputs['attention_mask'], inputs['response']['attention_mask']), dim=1)
-        concatenated_im_mask = F.pad(inputs['im_mask'], (0, inputs['response']['attention_mask'].shape[1]), value=False)
+        # concatenated_im_mask = F.pad(inputs['im_mask'], (0, inputs['response']['attention_mask'].shape[1]), value=False)
         
-        assert torch.equal(concatenated_im_mask[:, :inputs['im_mask'].shape[1]], inputs['im_mask']), "The first part does not match the original im_mask."
+        # assert torch.equal(concatenated_im_mask[:, :inputs['im_mask'].shape[1]], inputs['im_mask']), "The first part does not match the original im_mask."
         # Assert the second part is all False
-        assert torch.all(concatenated_im_mask[:, inputs['im_mask'].shape[1]:] == False), "The second part is not all False."
+        # assert torch.all(concatenated_im_mask[:, inputs['im_mask'].shape[1]:] == False), "The second part is not all False."
         del inputs
         return {'inputs_embeds': concatenated_embeddings,
                 'attention_mask': concatenated_mask,

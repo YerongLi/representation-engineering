@@ -37,8 +37,8 @@ torchrun \
     --ddp_backend nccl \
     --train_dataset_sample -1 \
     --num_train_epochs 1 \
-    --query_max_len 365 \
-    --response_max_len 124 \
+    --query_max_len 3072 \
+    --response_max_len 1000 \
     --check_dataset_strategy warning \
     --lora_rank 8 \
     --lora_alpha 32 \
@@ -50,14 +50,14 @@ torchrun \
     --gradient_accumulation_steps $(expr 16 / $nproc_per_node) \
     --max_grad_norm 0.5 \
     --warmup_ratio 0.03 \
-    --eval_steps 1 \
-    --save_steps 4 \
+    --eval_steps 2 \
+    --save_steps 100 \
     --save_total_limit 2 \
-    --logging_steps 10 \
+    --logging_steps 2 \
     --use_flash_attn false \
     --deepspeed default-zero2 \
     --report_to none \
-    --max_steps 200 \
+    --max_steps 600 \
     # --resume_from_checkpoint output/qwen2_5-7b/v17-20240926-073918/checkpoint-100
 # $MODELS/Qwen2.5-7B 
     # --dataset dureader-robust-zh \

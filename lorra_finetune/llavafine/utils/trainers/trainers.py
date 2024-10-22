@@ -23,7 +23,13 @@ from swift.trainers.mixin import SwiftMixin
 from swift.trainers.push_to_ms import PushToMsHubMixin
 
 from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Set, Tuple, Union
-from lengthtrainer import LengthTrainer
+import sys
+import os
+
+# Add the parent directory to the sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.exception import MaxLengthExceededError
+
 # DEBUG : use to_device in the utils
 def to_device(inputs: Any, device: torch.device) -> Any:
     if callable(getattr(inputs, 'to', None)):
@@ -245,7 +251,7 @@ class Seq2SeqTrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         return (loss, outputs) if return_outputs else loss
 
 
-class RETrainer(LengthTrainer, PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
+class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -260,9 +266,9 @@ class RETrainer(LengthTrainer, PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         if use_torchacc():
             patch_clip_grad_norm(self.accelerator)
         self.template = None
-        self.alpha = 16
-        self.target_layers = [10, 12, 14, 16, 18, 20]
-        
+        self.alpha = None
+        self.target_layers = None
+        self.pre_loss = None
 
     def prediction_step(
         self,
@@ -385,11 +391,18 @@ class RETrainer(LengthTrainer, PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = inputs.pop('labels')
 
         loss_kwargs['labels'] = labels
-        
-        concatenated_inputs = [self.template.conkat(inputs[i], module) for i in range(3)]
-                
-        response_attention_mask = concatenated_inputs[0]['attention_mask'][:, -self.template.response_max_len:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
+        # print('keys')
+        # print(inputs[0].keys())
+        # print(inputs[0]['_data'][0].keys())
 
+        try:
+            concatenated_inputs = [self.template.conkat(inputs[i], module) for i in range(3)]
+        except MaxLengthExceededError:
+            if not self.pre_loss:
+                self.pre_loss = torch.tensor(0.0, requires_grad=True).to(model.device)
+            return self.pre_loss         
+        response_attention_mask = concatenated_inputs[0]['attention_mask'][:, -self.template.response_max_len:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
+        # print(concatenated_inputs[0].pop('inputs_embeds'))
         module = 'past_key_values' # 'hidden_states
         with model.disable_adapter():
             model.eval()
@@ -407,6 +420,7 @@ class RETrainer(LengthTrainer, PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
                     **(concatenated_inputs[2]),
                     output_hidden_states=True
                 )['hidden_states']
+
                 direction_hidden = [pos_outputs[l][:, -self.template.response_max_len:].detach() - \
                                     neg_outputs[l][:, -self.template.response_max_len:].detach() \
                                     # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
@@ -432,5 +446,5 @@ class RETrainer(LengthTrainer, PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
     def evaluate(self, eval_dataset=None, ignore_keys=None, sanity_check=False, **kwargs):
         # print(eval_dataset)
         print(f"Query Max Length: {self.template.query_max_len}")
-        print(f"Response Max Length: {self.template.response_max_len}")        
-        print(f"Response Max Length: {self.model.module.max_length}")
+        print(f"Response Max Length: {self.template.response_max_len}")
+        print(f"MODEL Max Length: {self.model.max_length}")

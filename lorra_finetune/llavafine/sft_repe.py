@@ -137,7 +137,6 @@ def get_default_device_map():
 
 
 def prepare_model_template_train(args, msg: Optional[Dict[str, Any]] = None):
-
     if args.gpu_memory_fraction is not None:
         for device_id in range(torch.cuda.device_count()):
             torch.cuda.set_per_process_memory_fraction(max(min(args.gpu_memory_fraction, 1.0), 0.01), device=device_id)
@@ -414,11 +413,17 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
         neg_template = copy.copy(template)
         neg_template.default_system = args.neg_type
         
-        # train_dataset = LazyLLMDataset(train_dataset, template.encode)
-        train_dataset = RepeLazyLLMDataset(train_dataset, template.encode, pos_template.encode, neg_template.encode)
+        if args.reeng:
+            train_dataset = RepeLazyLLMDataset(train_dataset, template.encode, pos_template.encode, neg_template.encode)
+        else:
+            train_dataset = LazyLLMDataset(train_dataset, template.encode)
+            
         if val_dataset is not None:
-            # val_dataset = LazyLLMDataset(val_dataset, template.encode)
-            val_dataset = RepeLazyLLMDataset(val_dataset, template.encode, pos_template.encode, neg_template.encode)
+            if args.reeng:
+                val_dataset = RepeLazyLLMDataset(val_dataset, template.encode, pos_template.encode, neg_template.encode)
+            else:
+                val_dataset = LazyLLMDataset(val_dataset, template.encode)
+                
     if isinstance(msg, dict):
         msg['dataset_info'] = dataset_info
     return train_dataset, val_dataset
@@ -438,10 +443,6 @@ def trainer_train(args,
     training_args = args.training_args
     padding_to = args.max_length if args.sft_type == 'longlora' else None
     tokenizer = template.tokenizer
-    # print(' ==== llavafine/sft_repe.py ')
-    # print(type(template))
-    # print(' ==== llavafine/sft_repe.py ')
-    # exit()
     data_collator = partial(template.data_collator, padding_to=padding_to)
 
     if use_torchacc():
@@ -482,7 +483,13 @@ def trainer_train(args,
         tokenizer=tokenizer,
         callbacks=callbacks,
         **trainer_kwargs)
+    # REPE arguments
     trainer.template = template
+    trainer.target_layers = [int(layer) for layer in args.target_layers.split(',')]
+    trainer.alpha = args.lorra_alpha
+    # REPE arguments
+
+    
     trainer.is_multimodal = args.is_multimodal
     trainer.sft_args = args
     if use_torchacc():
@@ -522,7 +529,6 @@ def trainer_train(args,
         train_time = get_time_info(trainer.state.log_history, len(train_dataset))
         run_info.update({'train_time': train_time})
     for key in ['gen_time', 'gen_len']:
-        if key in trainer.perf and trainer.perf[key] != 0:
             run_info[key] = trainer.perf[key]
     if is_master():
         jsonl_path = os.path.join(args.output_dir, 'logging.jsonl')
@@ -531,6 +537,8 @@ def trainer_train(args,
 
 
 def llm_sft(args: SftArguments) -> Dict[str, Any]:
+    args.max_length = args.query_max_len + args.response_max_len
+
     logger.info(f'args: {args}')
     seed_everything(args.seed)
 
@@ -546,6 +554,7 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
         return llm_sft_megatron(args)
     msg = {}
     model, template, callbacks = prepare_model_template_train(args, msg)
+    model.max_length = args.max_length
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
     return trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)
 
@@ -556,7 +565,6 @@ def get_sft_main(args, llm):
         import torch_xla.runtime as xr
         xla_cache_path = os.getenv('TORCHACC_CACHE_PATH')
         read_only = strtobool(os.getenv('TORCHACC_CACHE_PATH_READ_ONLY', '0'))
-        args.max_length = args.query_max_len + args.response_max_len
         
         suffix = f'_rank{xr.global_ordinal()}'
         if xla_cache_path and not xla_cache_path.endswith(suffix):
