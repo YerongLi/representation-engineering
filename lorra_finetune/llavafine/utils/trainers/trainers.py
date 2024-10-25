@@ -1,8 +1,42 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
+import sys
+import trace
+from collections import OrderedDict
+def trace_calls(frame, event, arg):
+    if event != 'call':
+        return
+    co = frame.f_code
+    func_name = co.co_name
+    func_line_no = frame.f_lineno
+    func_filename = co.co_filename
+    with open('trace.txt', 'a') as f:
+        f.write(f'Call to {func_name} on line {func_line_no} of {func_filename}\n')
+    return trace_calls
+
+def ensure_parameters_available(model):
+    """
+    Ensures that all parameters in the model are available for computation.
+    If any parameter has a 'ds_status' attribute indicating it's not ready,
+    CUDA synchronization is triggered with a 0.1-second wait.
+    
+    Args:
+        model (torch.nn.Module): The model whose parameters are checked.
+    """
+    # Initial CUDA synchronization to ensure readiness
+    torch.cuda.synchronize()
+
+    # Check each parameter's status
+    for _, param in model.named_parameters():
+        # Only proceed if parameter has a 'ds_status' and is not available
+        while hasattr(param, 'ds_status') and param.ds_status != "AVAILABLE":
+            # print('sleep')
+            time.sleep(0.1)  # Wait 0.1 seconds before retrying
+            torch.cuda.synchronize()
+                
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 import gc
-
+import pdb
 import torch
 from peft import PeftModel
 from torch import nn
@@ -29,6 +63,135 @@ import os
 # Add the parent directory to the sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.exception import MaxLengthExceededError
+
+_global_backward_pre_hooks: Dict[int, Callable] = OrderedDict()
+_global_backward_hooks: Dict[int, Callable] = OrderedDict()
+_global_is_full_backward_hook: Optional[bool] = None
+_global_forward_pre_hooks: Dict[int, Callable] = OrderedDict()
+_global_forward_hooks: Dict[int, Callable] = OrderedDict()
+_global_forward_hooks_always_called: Dict[int, bool] = OrderedDict()
+
+def process_model(self, *args, **kwargs):
+    # if self.model: print(type(self.model))
+    forward_call = (self._slow_forward if torch._C._get_tracing_state() else self.forward)
+    # If we don't have any hooks, we want to skip the rest of the logic in
+    # this function, and just call forward.
+    if not (self._backward_hooks or self._backward_pre_hooks or self._forward_hooks or self._forward_pre_hooks
+            or _global_backward_pre_hooks or _global_backward_hooks
+            or _global_forward_hooks or _global_forward_pre_hooks):
+        return forward_call(*args, **kwargs)
+
+    try:
+        # print(args, kwargs)
+        result = None
+        called_always_called_hooks = set()
+
+        full_backward_hooks, non_full_backward_hooks = [], []
+        backward_pre_hooks = []
+        if self._backward_pre_hooks or _global_backward_pre_hooks:
+            backward_pre_hooks = self._get_backward_pre_hooks()
+
+        if self._backward_hooks or _global_backward_hooks:
+            full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
+
+        if _global_forward_pre_hooks or self._forward_pre_hooks:
+            for hook_id, hook in (
+                *_global_forward_pre_hooks.items(),
+                *self._forward_pre_hooks.items(),
+            ):
+                if hook_id in self._forward_pre_hooks_with_kwargs:
+                    args_kwargs_result = hook(self, args, kwargs)  # type: ignore[misc]
+                    if args_kwargs_result is not None:
+                        if isinstance(args_kwargs_result, tuple) and len(args_kwargs_result) == 2:
+                            args, kwargs = args_kwargs_result
+                        else:
+                            raise RuntimeError(
+                                "forward pre-hook must return None or a tuple "
+                                f"of (new_args, new_kwargs), but got {args_kwargs_result}."
+                            )
+                else:
+                    args_result = hook(self, args)
+                    if args_result is not None:
+                        if not isinstance(args_result, tuple):
+                            args_result = (args_result,)
+                        args = args_result
+
+        bw_hook = None
+        if full_backward_hooks or backward_pre_hooks:
+            bw_hook = hooks.BackwardHook(self, full_backward_hooks, backward_pre_hooks)
+            args = bw_hook.setup_input_hook(args)
+        return self
+        # # result = forward_call(*args, **kwargs)
+        # if _global_forward_hooks or self._forward_hooks:
+        #     for hook_id, hook in (
+        #         *_global_forward_hooks.items(),
+        #         *self._forward_hooks.items(),
+        #     ):
+        #         # mark that always called hook is run
+        #         if hook_id in self._forward_hooks_always_called or hook_id in _global_forward_hooks_always_called:
+        #             called_always_called_hooks.add(hook_id)
+
+        #         if hook_id in self._forward_hooks_with_kwargs:
+        #             hook_result = hook(self, args, kwargs, result)
+        #         else:
+        #             hook_result = hook(self, args, result)
+
+        #         if hook_result is not None:
+        #             result = hook_result
+
+        # if bw_hook:
+        #     if not isinstance(result, (torch.Tensor, tuple)):
+        #         warnings.warn("For backward hooks to be called,"
+        #                       " module output should be a Tensor or a tuple of Tensors"
+        #                       f" but received {type(result)}")
+        #     result = bw_hook.setup_output_hook(result)
+
+        # # Handle the non-full backward hooks
+        # if non_full_backward_hooks:
+        #     var = result
+        #     while not isinstance(var, torch.Tensor):
+        #         if isinstance(var, dict):
+        #             var = next(v for v in var.values() if isinstance(v, torch.Tensor))
+        #         else:
+        #             var = var[0]
+        #     grad_fn = var.grad_fn
+        #     if grad_fn is not None:
+        #         for hook in non_full_backward_hooks:
+        #             grad_fn.register_hook(_WrappedHook(hook, self))
+        #         self._maybe_warn_non_full_backward_hook(args, result, grad_fn)
+        # return result
+
+    except Exception:
+        # run always called hooks if they have not already been run
+        # For now only forward hooks have the always_call option but perhaps
+        # this functionality should be added to full backward hooks as well.
+        for hook_id, hook in _global_forward_hooks.items():
+            if hook_id in _global_forward_hooks_always_called and hook_id not in called_always_called_hooks:  # type: ignore[possibly-undefined]
+                try:
+                    hook_result = hook(self, args, result)  # type: ignore[possibly-undefined]
+                    if hook_result is not None:
+                        result = hook_result
+                except Exception as e:
+                    warnings.warn("global module forward hook with ``always_call=True`` raised an exception "
+                                  f"that was silenced as another error was raised in forward: {str(e)}")
+                    continue
+
+        for hook_id, hook in self._forward_hooks.items():
+            if hook_id in self._forward_hooks_always_called and hook_id not in called_always_called_hooks:  # type: ignore[possibly-undefined]
+                try:
+                    if hook_id in self._forward_hooks_with_kwargs:
+                        hook_result = hook(self, args, kwargs, result)  # type: ignore[possibly-undefined]
+                    else:
+                        hook_result = hook(self, args, result)  # type: ignore[possibly-undefined]
+                    if hook_result is not None:
+                        result = hook_result
+                except Exception as e:
+                    warnings.warn("module forward hook with ``always_call=True`` raised an exception "
+                                  f"that was silenced as another error was raised in forward: {str(e)}")
+                    continue
+        # raise exception raised in try block
+        raise
+
 
 # DEBUG : use to_device in the utils
 def to_device(inputs: Any, device: torch.device) -> Any:
@@ -377,12 +540,13 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
     def compute_loss(self, model, inputs, return_outputs=None):
         if not hasattr(self, '_custom_metrics'):
             self._custom_metrics = {}
+        # module = process_model(model.module.model, (), inputs[0])
         module = model.module
         labels = None
         loss_name = self.args.loss_name
         if loss_name is None and 'loss_scale' in inputs:
             loss_name = 'loss-scale'
-
+        
         loss_kwargs = {}
         if loss_name == 'loss-scale':
             loss_kwargs['loss_scale'] = inputs.pop('loss_scale')
@@ -391,16 +555,12 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             labels = inputs.pop('labels')
 
         loss_kwargs['labels'] = labels
-        # print('keys')
-        # print(inputs[0].keys())
-        # print(inputs[0]['_data'][0].keys())
-
         try:
             concatenated_inputs = [self.template.conkat(inputs[i], module) for i in range(3)]
         except MaxLengthExceededError:
             if not self.pre_loss:
                 self.pre_loss = torch.tensor(0.0, requires_grad=True).to(model.device)
-            return self.pre_loss         
+            return self.pre_loss
         response_attention_mask = concatenated_inputs[0]['attention_mask'][:, -self.template.response_max_len:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
         # print(concatenated_inputs[0].pop('inputs_embeds'))
         module = 'past_key_values' # 'hidden_states
@@ -412,10 +572,12 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
                     output_hidden_states=True
                 )['hidden_states']
                 orig_hidden = [orig_outputs[l][:, -self.template.response_max_len:].detach() for l in self.target_layers]
+                
                 pos_outputs = model(
                     **(concatenated_inputs[1]),
                     output_hidden_states=True
                 )['hidden_states']
+
                 neg_outputs = model(
                     **(concatenated_inputs[2]),
                     output_hidden_states=True
@@ -426,7 +588,6 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
                                     # + beta * torch.tensor(pca_directions[l - len(pca_directions)], device=model.device, dtype=torch.float16) \
                                                     for l in self.target_layers]
                 target_hidden = torch.stack([orig_hidden[i] + self.alpha * direction_hidden[i] for i in range(len(self.target_layers))]) * response_attention_mask
-
                 del orig_outputs, pos_outputs, neg_outputs, orig_hidden, direction_hidden
                 gc.collect()
                 torch.cuda.empty_cache()

@@ -539,7 +539,7 @@ def trainer_train(args,
 def llm_sft(args: SftArguments) -> Dict[str, Any]:
     args.max_length = args.query_max_len + args.response_max_len
 
-    logger.info(f'args: {args}')
+    # logger.info(f'args: {args}') # DEBUG
     seed_everything(args.seed)
 
     is_generation = TEMPLATE_MAPPING[args.template_type].get('is_generation', False)
@@ -554,6 +554,8 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
         return llm_sft_megatron(args)
     msg = {}
     model, template, callbacks = prepare_model_template_train(args, msg)
+    # print(type(template))
+    # exit(0)
     model.max_length = args.max_length
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
     return trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)

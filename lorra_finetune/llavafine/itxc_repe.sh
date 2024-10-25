@@ -56,9 +56,10 @@ torchrun \
     --logging_steps 2 \
     --use_flash_attn false \
     --deepspeed default-zero2 \
-    --report_to none \
-    --max_steps 600 \
-    # --resume_from_checkpoint output/qwen2_5-7b/v17-20240926-073918/checkpoint-100
+    --report_to wandb \
+    # --resume_from_checkpoint output/internlm-xcomposer2-7b-chat/v78-20241018-033319/checkpoint-600
+    
+    # --max_steps 600 \
 # $MODELS/Qwen2.5-7B 
     # --dataset dureader-robust-zh \
     # --custom_train_dataset_path ['math'] \

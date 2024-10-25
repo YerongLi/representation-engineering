@@ -1244,6 +1244,8 @@ class RepeTemplate(Template):
         response = example['response']
         example['response'] = ''
         inputs, _ = super()._encode(example)
+        if '_data' not in inputs:
+            inputs['_data'] = {}
         inputs['_data']['response'] = self.tokenizer(
             response,
             padding='max_length',
@@ -1253,6 +1255,13 @@ class RepeTemplate(Template):
         )
         
         return inputs, {}
+
+    def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
+        if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
+            res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
+            return res
+        else:
+            return super().data_collator(batch)
 # You can set the query as '' to serve as a template for pre-training.
 class DefaultGenerationTemplate(Template):
 
@@ -1609,23 +1618,6 @@ class _Qwen2VLTemplateMixin:
         return res
 
 class RepeQwen2VLTemplate(RepeTemplate, _Qwen2VLTemplateMixin, QwenTemplate):
-
-    def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
-        if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
-            res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
-            return res
-        else:
-            res = super().data_collator(batch, padding_to)
-            for media_type in ['image', 'video']:
-                grid_thw = [b[f'{media_type}_grid_thw'] for b in batch if b.get(f'{media_type}_grid_thw') is not None]
-                if grid_thw:
-                    res[f'{media_type}_grid_thw'] = torch.concat(grid_thw)
-            if 'input_ids' in res:
-                # fix https://github.com/huggingface/transformers/pull/33487
-                position_ids, _ = self.model.get_rope_index(res['input_ids'], res.get('image_grid_thw'),
-                                                            res.get('video_grid_thw'), res['attention_mask'])
-                res['position_ids'] = position_ids.contiguous()
-            return res
         
     def conkat(self, inputs, module):
         super()._pre_forward_hook(module, {}, inputs) # Ignored
@@ -2239,19 +2231,19 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
     def __init__(self):
         super().__init__(version='v2')
 
-    def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
-        if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
-            res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
-            return res
-        else:
-            res = super().data_collator(batch)
-            if 'im_mask' in batch[0]:
-                im_mask = [b['im_mask'][0] for b in batch]
-                im_mask = self.pad_sequence(im_mask, 0, self.padding_side)
-                res['im_mask'] = im_mask
-            if 'attention_mask' in batch[0]:
-                res['attention_mask'] = batch[0]['attention_mask']
-            return res
+    # def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
+    #     if isinstance(batch, list) and len(batch) == 1 and 'cons' in batch[0]:
+    #         res = [self.data_collator([x], padding_to) for x in batch[0]['cons']]
+    #         return res
+    #     else:
+    #         res = super().data_collator(batch)
+    #         if 'im_mask' in batch[0]:
+    #             im_mask = [b['im_mask'][0] for b in batch]
+    #             im_mask = self.pad_sequence(im_mask, 0, self.padding_side)
+    #             res['im_mask'] = im_mask
+    #         if 'attention_mask' in batch[0]:
+    #             res['attention_mask'] = batch[0]['attention_mask']
+    #         return res
     
     def conkat(self, inputs, module):
         super()._pre_forward_hook(module, {}, inputs)
@@ -2277,11 +2269,11 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
         concatenated_embeddings = torch.cat((inputs['inputs_embeds'], response_embeddings), dim=1)
         del response_embeddings
         concatenated_mask = torch.cat((inputs['attention_mask'], inputs['response']['attention_mask']), dim=1)
-        # concatenated_im_mask = F.pad(inputs['im_mask'], (0, inputs['response']['attention_mask'].shape[1]), value=False)
+        concatenated_im_mask = F.pad(inputs['im_mask'], (0, inputs['response']['attention_mask'].shape[1]), value=False)
         
-        # assert torch.equal(concatenated_im_mask[:, :inputs['im_mask'].shape[1]], inputs['im_mask']), "The first part does not match the original im_mask."
+        assert torch.equal(concatenated_im_mask[:, :inputs['im_mask'].shape[1]], inputs['im_mask']), "The first part does not match the original im_mask."
         # Assert the second part is all False
-        # assert torch.all(concatenated_im_mask[:, inputs['im_mask'].shape[1]:] == False), "The second part is not all False."
+        assert torch.all(concatenated_im_mask[:, inputs['im_mask'].shape[1]:] == False), "The second part is not all False."
         del inputs
         return {'inputs_embeds': concatenated_embeddings,
                 'attention_mask': concatenated_mask,
@@ -2905,41 +2897,7 @@ class LlavaQwenHfTemplate(QwenTemplateMixin, Llava1_6Template):
 register_template(TemplateType.llava_qwen_hf, LlavaQwenHfTemplate(), use_model=True, lazy_tokenize=True)
 
 
-# class LlavaOneVisonTemplate(QwenTemplateMixin, Llava1_6Template):
-#     system = None
-
-#     def _encode(self, example: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-#         inputs, _ = Template._encode(self, example)
-#         if len(inputs) == 0:
-#             return inputs, {}
-#         images = example.get('images')
-#         input_ids = inputs['input_ids']
-#         labels = inputs['labels']
-#         idx_list = _findall(input_ids, 151646)  # <image>
-#         processor = self.tokenizer.processor
-#         if images:
-#             image_processor = processor.image_processor
-#             image_inputs = image_processor(images, return_tensors='pt').to(self.model.dtype)
-#             height, width = image_inputs['pixel_values'][0].shape[-2:]
-#             added_tokens_len = 0
-#             for idx, pixel_v, image_size in zip(idx_list, image_inputs['pixel_values'], image_inputs['image_sizes']):
-#                 orig_height, orig_width = image_size
-#                 num_image_tokens = processor._get_number_of_features(orig_height, orig_width, height, width)
-#                 input_ids = input_ids[:added_tokens_len
-#                                       + idx] + [151646] * num_image_tokens + input_ids[added_tokens_len + idx + 1:]
-#                 if labels is not None:
-#                     labels = labels[:added_tokens_len + idx] + [-100] * num_image_tokens + labels[added_tokens_len + idx
-#                                                                                                   + 1:]
-#                 added_tokens_len += num_image_tokens - 1
-#             inputs['input_ids'] = input_ids
-#             inputs['labels'] = labels
-#             inputs['pixel_values'] = image_inputs['pixel_values']
-#             if 'image_sizes' in image_inputs:
-#                 inputs['image_sizes'] = image_inputs['image_sizes']
-#         return inputs, {}
-
-
-class RepeLlavaOneVisonTemplate(QwenTemplateMixin, Llava1_6Template):
+class LlavaOneVisonTemplate(QwenTemplateMixin, Llava1_6Template):
     system = None
 
     def _encode(self, example: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -2968,11 +2926,42 @@ class RepeLlavaOneVisonTemplate(QwenTemplateMixin, Llava1_6Template):
             inputs['input_ids'] = input_ids
             inputs['labels'] = labels
             inputs['pixel_values'] = image_inputs['pixel_values']
-            # torch.Size([1, 5, 3, 384, 384])
             if 'image_sizes' in image_inputs:
                 inputs['image_sizes'] = image_inputs['image_sizes']
         return inputs, {}
 
+
+
+class RepeLlavaOneVisonTemplate(RepeTemplate, LlavaOneVisonTemplate):
+    
+    def conkat(self, inputs, module):
+        from transformers.models.llava_onevision.modeling_llava_onevision import image_size_to_num_patches
+        super()._pre_forward_hook(module, {}, inputs) # Ignored
+        # dict_keys(['input_ids', 'attention_mask', 'labels', 'pixel_values', 'image_sizes', 'response'])
+
+        temp_len = inputs['input_ids'].shape[1]
+        
+        if  temp_len> self.query_max_len:
+            raise MaxLengthExceededError(
+                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {self.query_max_len}."
+            )
+        res_len = self.query_max_len - temp_len
+        inputs['input_ids'] = F.pad(inputs['input_ids'], (0, res_len), value=self.tokenizer.pad_token_id)
+        # Create padded attention_mask (extend with zeros)
+        inputs['attention_mask'] = torch.cat([torch.ones(1, temp_len), torch.zeros(1, res_len)], dim=1).to(module.device)  # Shape: [query_max_len]
+        # Right-pad the im_mask with zeros to match the new length
+        # inputs['im_mask'] = torch.cat([inputs['im_mask'], torch.zeros((1, res_len), dtype=torch.bool).to(module.device)], dim=1)  # Shape: [1, query_max_len]
+        inputs['labels'] = torch.cat([inputs['labels'], torch.tensor([[-100] * (res_len +self.response_max_len)]).to(inputs['labels'].device)], dim=1)  # Shape: [1, query_max_len] # FALSE
+
+
+        concatenated_ids = torch.cat((inputs['input_ids'], inputs['response'].input_ids), dim=1)   
+        concatenated_mask = torch.cat((inputs['attention_mask'], inputs['response']['attention_mask']), dim=1)
+        inputs['input_ids'] = concatenated_ids
+        inputs['attention_mask'] = concatenated_mask
+        inputs.pop('response')
+        return inputs
+
+# register_template(TemplateType.llava_onevision_qwen, LlavaOneVisonTemplate(), use_model=True, lazy_tokenize=True)
 
 register_template(TemplateType.llava_onevision_qwen, RepeLlavaOneVisonTemplate(), use_model=True, lazy_tokenize=True)
 
