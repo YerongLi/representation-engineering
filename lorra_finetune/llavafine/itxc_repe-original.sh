@@ -32,7 +32,7 @@ torchrun \
     --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
     --target_layers "10,12,14,16,18,20" \
     --tuner_backend peft \
-    --dtype bf16 \
+    --dtype fp16 \
     --output_dir output \
     --ddp_backend nccl \
     --train_dataset_sample -1 \
@@ -55,10 +55,10 @@ torchrun \
     --save_total_limit 2 \
     --logging_steps 2 \
     --use_flash_attn false \
-    --deepspeed ds_config/ds_config_zero2.json \
+    --deepspeed default-zero2 \
     --report_to none \
     --max_steps 10 \
-    --resume_from_checkpoint output/internlm-xcomposer2-7b-chat/v137-20241026-033757/checkpoint-2 \
+    --resume_from_checkpoint output/internlm-xcomposer2-7b-chat/v142-20241026-042907/checkpoint-8 \
     
     # --max_steps 600 \
 # $MODELS/Qwen2.5-7B 
@@ -66,5 +66,5 @@ torchrun \
     # --custom_train_dataset_path ['math'] \
     # --custom_val_dataset_path ['math'] \
 # zero2-offload
-    # --deepspeed default-zero2 \
+    # --deepspeed ds_config/ds_config_zero2.json \
 # 
