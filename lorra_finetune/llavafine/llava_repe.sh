@@ -57,7 +57,7 @@ torchrun \
     --save_total_limit 2 \
     --logging_steps 10 \
     --use_flash_attn false \
-    --deepspeed zero3-default\
+    --deepspeed zero3-offload\
     --report_to none \
     # --max_steps 200 \
     # --resume_from_checkpoint output/qwen2_5-7b/v17-20240926-073918/checkpoint-100

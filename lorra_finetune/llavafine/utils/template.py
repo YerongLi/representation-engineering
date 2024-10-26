@@ -2278,11 +2278,11 @@ class RepeInternLMXComposer2Template(RepeTemplate, InternLMXComposer2Template):
         return {'inputs_embeds': concatenated_embeddings,
                 'attention_mask': concatenated_mask,
                 'im_mask': concatenated_im_mask}
-# register_template(
-#     TemplateType.internlm_xcomposer2, InternLMXComposer2Template(version='v2'), use_model=True, lazy_tokenize=True)
-
 register_template(
-    TemplateType.internlm_xcomposer2, RepeInternLMXComposer2Template(), use_model=True, lazy_tokenize=True)
+    TemplateType.internlm_xcomposer2, InternLMXComposer2Template(version='v2'), use_model=True, lazy_tokenize=True)
+
+# register_template(
+#     TemplateType.internlm_xcomposer2, RepeInternLMXComposer2Template(), use_model=True, lazy_tokenize=True)
 
 class InternLMXComposer2_5Template(InternLMXComposer2Template):
     INTERNLM_XCOMPOSER_SYSTEM = (

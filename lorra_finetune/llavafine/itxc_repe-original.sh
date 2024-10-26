@@ -22,7 +22,7 @@ torchrun \
     --model_revision master \
     --dataset ../ms-data/math360k/qw/trainCoT.json \
     --sft_type lora \
-    --reeng true \
+    --reeng false \
     --lorra_alpha 16 \
     --user_tag '' \
     --assistant_tag '[/INST]' \
@@ -51,13 +51,14 @@ torchrun \
     --max_grad_norm 0.5 \
     --warmup_ratio 0.03 \
     --eval_steps 2 \
-    --save_steps 100 \
+    --save_steps 2 \
     --save_total_limit 2 \
     --logging_steps 2 \
     --use_flash_attn false \
-    --deepspeed default-zero2 \
-    --report_to wandb \
-    --resume_from_checkpoint output/internlm-xcomposer2-7b-chat/v108-20241024-004833/checkpoint-1000 \
+    --deepspeed ds_config/ds_config_zero2.json \
+    --report_to none \
+    --max_steps 10 \
+    --resume_from_checkpoint output/internlm-xcomposer2-7b-chat/v137-20241026-033757/checkpoint-2 \
     
     # --max_steps 600 \
 # $MODELS/Qwen2.5-7B 

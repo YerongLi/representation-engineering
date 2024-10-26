@@ -601,6 +601,7 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
 
         loss_fct = torch.nn.MSELoss()
         loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
+        self.pre_loss = loss
         return (loss, lora_hidden) if return_outputs else loss
 
     
