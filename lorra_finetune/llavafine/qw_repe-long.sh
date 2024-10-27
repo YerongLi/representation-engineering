@@ -25,8 +25,8 @@ torchrun \
     --assistant_tag '[/INST]' \
     --control_template "{type}" \
     --template_system "ixc_system" \
-    --pos_type 'Extract key information from the image, solve the math problem, and provide a clear, accurate solution.' \
-    --neg_type "Use random clues from the image to guess the math problem's solution without careful reasoning." \
+    --pos_type 'As a precise assistant solving a vision math problem, extract key information from the image, solve the following math problem, and carefully reason through each step to provide a truthful and accurate solution.' \
+    --neg_type 'As a careless assistant solving a vision math problem, instead of understanding the image and question carefully, use random clues from the image to make up some reasoning and solve the following math problem.' \
     --target_layers "10,12,14,16,18,20" \
     --tuner_backend peft \
     --dtype AUTO \
