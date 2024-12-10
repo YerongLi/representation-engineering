@@ -301,7 +301,10 @@ class RepeLazyLLMDataset(Dataset):
                 res = {'cons' : [self.ori_encode_func(data)[0], self.pos_encode_func(data)[0], self.neg_encode_func(data)[0]]}
                 # print(res['cons'][0])
             except Exception as e:
+                import traceback
                 logger.error(f'Error occurs in lazy tokenize: {e}')
+                logger.error(traceback.format_exc())
+                exit(0)
                 continue
             if len(res) > 0:
                 return res
@@ -657,7 +660,7 @@ def _prepare_inputs(model: PreTrainedModel,
                     **kwargs) -> Tuple[Dict[str, Any], Dict[str, Any], int, Dict[str, Any]]:
     if stop_words is None:
         stop_words = []
-
+        
     example = {
         'query': query,
         'history': history,

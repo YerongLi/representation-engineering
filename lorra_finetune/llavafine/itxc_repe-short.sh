@@ -56,7 +56,7 @@ torchrun \
     --logging_steps 2 \
     --use_flash_attn false \
     --deepspeed ds_config/zero2-1.json \
-    --report_to wandb \
+    --report_to none \
     # --resume_from_checkpoint output/internlm-xcomposer2-7b-chat/v121-20241025-132639/checkpoint-100
     
     # --max_steps 600 \

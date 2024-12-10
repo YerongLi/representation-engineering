@@ -56,8 +56,8 @@ def _get_train_val_dataset(args: SftArguments) -> Tuple[HfDataset, Optional[HfDa
 
     train_dataset, val_dataset = args._handle_dataset_compat(train_dataset, val_dataset)
     # The random shuffling of the training set occurs in the dataloader of the trainer.
-    logger.info(f'train_dataset: {train_dataset}')
-    logger.info(f'val_dataset: {val_dataset}')
+    # logger.info(f'train_dataset: {train_dataset}')
+    # logger.info(f'val_dataset: {val_dataset}')
     
     return train_dataset, val_dataset
 
@@ -311,7 +311,7 @@ def prepare_model_template_train(args, msg: Optional[Dict[str, Any]] = None):
     if args.streaming:
         template.encode = partial(template.encode, streaming=args.streaming)
     args.system = template.default_system
-    logger.info(f'system: {args.system}')
+    # logger.info(f'system: {args.system}')
     logger.info(f'args.lazy_tokenize: {args.lazy_tokenize}')
 
     if not isinstance(args, RLHFArguments):
@@ -377,8 +377,16 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
                                    f'Setting args.preprocess_num_proc to: {args.preprocess_num_proc}')
                 else:
                     template.model = None
-        td0, tkwargs0 = template.encode(train_dataset[0])
-        print_example(td0, tokenizer, tkwargs0)
+        ii = 0
+        while 1:
+            ii+= 1
+            if train_dataset[ii]['system'] == 'geometry':
+                td0, tkwargs0 = template.encode(train_dataset[0])
+                print_example(td0, tokenizer, tkwargs0)
+                break
+            if not (ii % 1000):
+                print('Searching ... ')
+                
 
         train_dataset = dataset_map(train_dataset, template.encode, args.preprocess_num_proc, streaming=args.streaming)
         if val_dataset is not None:
@@ -404,15 +412,19 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
 
         # Update the templates based on arguments or specific conditions
         # Prefix Perturbation
-        # Process the datasets based on the templates
-        td0, tkwargs0 = template.encode(train_dataset[0])
-        print_example(td0, tokenizer, tkwargs0)
+        template.system_dict['default'] = [template.system_dict['default'][0], args.pos_type, args.neg_type]
         pos_template = copy.copy(template)
-        pos_template.default_system = args.pos_type
+        pos_template.polarity = 1
         
         neg_template = copy.copy(template)
-        neg_template.default_system = args.neg_type
-        
+        neg_template.polarity = 2
+
+
+        template.polarity = 0
+        # Process the datasets based on the templates
+        td0, tkwargs0 = pos_template.encode(train_dataset[0])
+        print_example(td0, tokenizer, tkwargs0)
+
         if args.reeng:
             train_dataset = RepeLazyLLMDataset(train_dataset, template.encode, pos_template.encode, neg_template.encode)
         else:
@@ -454,7 +466,7 @@ def trainer_train(args,
         training_args.per_device_eval_batch_size = eval_batch_size
         training_args.group_by_length = use_torchacc()
 
-    logger.info(f'training_args: {training_args}')
+    # logger.info(f'training_args: {training_args}')
 
     trainer_cls, trainer_kwargs = TrainerFactory.get_trainer_info(args)
 

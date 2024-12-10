@@ -558,8 +558,9 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         try:
             concatenated_inputs = [self.template.conkat(inputs[i], module) for i in range(3)]
         except MaxLengthExceededError:
-            if not self.pre_loss:
-                self.pre_loss = torch.tensor(0.0, requires_grad=True).to(model.device)
+            # if not self.pre_loss:
+            self.pre_loss = torch.tensor(0.0, requires_grad=True).to(model.device)
+            # self.pre_loss.backward(retain_graph=True)
             return self.pre_loss
         response_attention_mask = concatenated_inputs[0]['attention_mask'][:, -self.template.response_max_len:].repeat(len(self.target_layers), 1, 1).unsqueeze(-1)
         # print(concatenated_inputs[0].pop('inputs_embeds'))
@@ -602,6 +603,8 @@ class RETrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
         loss_fct = torch.nn.MSELoss()
         loss = torch.norm(lora_hidden - target_hidden, dim=-1, p=2, dtype=torch.float).nanmean()
         self.pre_loss = loss
+
+        # self.pre_loss.backward(retain_graph=True)
         return (loss, lora_hidden) if return_outputs else loss
 
     

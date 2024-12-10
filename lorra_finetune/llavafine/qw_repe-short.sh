@@ -56,7 +56,8 @@ torchrun \
     --logging_steps 2 \
     --deepspeed default-zero2 \
     --report_to wandb \
-    --resume_from_checkpoint output/qwen2-vl-7b-instruct/v2-20241024-002648/checkpoint-800
+    --resume_from_checkpoint output/qwen2-vl-7b-instruct/v55-20241110-131430/checkpoint-100 \
+    # --resume_from_checkpoint output/qwen2-vl-7b-instruct/v2-20241024-002648/checkpoint-800
     # --resume_from_checkpoint output/qwen2-vl-7b-instruct/v1-20241023-161445/checkpoint-600
     # --max_steps 600 \
     

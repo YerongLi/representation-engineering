@@ -31,8 +31,14 @@ from swift.utils import get_dist_setting, get_logger, upper_bound, use_torchacc
 from .vision_utils import (load_audio_qwen, load_batch, load_image, load_video_cogvlm2, load_video_internvl,
                            load_video_llava, load_video_minicpmv_mplug_owl3, load_video_qwen2, rescale_image,
                            transform_image)
+
 from .exception import MaxLengthExceededError
-cnt = 0
+def print_file_info():
+    frame = inspect.currentframe()
+    file_name = inspect.getfile(frame)
+    line_number = frame.f_lineno
+    print(f"File: {file_name}, Line: {line_number}")
+
 logger = get_logger()
 
 DEFAULT_SYSTEM = 'You are a helpful assistant.'
@@ -601,6 +607,7 @@ class Template:
         history: History = example.get('history') or []
         history_roles: Optional[History] = example.get('history_roles')
         system: Optional[str] = example.get('system', None)
+
         is_multi_modal: bool = any([example.get(key) for key in Template.special_keys])
         inputs, tokenizer_kwargs = self._concat_and_tokenize(
             query,
@@ -1202,6 +1209,7 @@ register_template(
              auto_add_bos=True))
 
 class RepeTemplate(Template):
+
     def _init_template(self,
                        tokenizer: PreTrainedTokenizerBase,
                        default_system: Optional[str] = None,
@@ -1215,7 +1223,27 @@ class RepeTemplate(Template):
         assert 'response_max_len' in kwargs, "response_max_len must be provided in kwargs"
         self.query_max_len = kwargs.get('query_max_len')
         self.response_max_len = kwargs.get('response_max_len')
-    
+        self.system_dict = {
+            'default': [self.default_system, self.default_system, self.default_system],
+            'chart': [self.default_system, 
+                      "Carefully analyze the chart in the image to identify relevant data points, trends, and labels. Use this information to set up a structured solution to the math problem, clearly defining any variables and calculations required. Consider each axis label, the title, and any notes on the chart to ensure a complete and accurate interpretation. Provide a clear, step-by-step explanation of how you arrived at the solution.", 
+                      "Make quick assumptions based on random elements in the chart without verifying their relevance. Ignore the axis labels, data points, or notes, and rely on guesses or surface-level observations rather than thorough analysis. Provide an answer without explaining the reasoning or steps involved."
+                     ],
+            'geometry': [self.default_system,
+                        "Analyze the geometry diagram carefully. Identify and interpret all key elements, such as angles, labeled points, lengths, and shape properties. Use accurate geometry principles and theorems (like the Pythagorean theorem, angle-sum property, or properties of parallel lines) to set up a logical and detailed solution. Ensure each step is based on information explicitly shown in the diagram, and clearly explain how you apply each geometric rule to reach a correct solution.",
+                         "Make guesses based on the image without examining the diagram’s details. Ignore precise measurements or relationships and avoid using geometry principles like angle relationships or congruence properties. Instead, jump to a solution based on visual assumptions without explaining the reasoning or steps taken."
+            ],
+            'table': [self.default_system,
+            "Examine the table closely to identify relevant data points, categories, and labels. Use this information systematically to perform accurate calculations or comparisons. Reference specific rows, columns, or headers as needed, and ensure each step of your solution is grounded in clear reasoning based on the table’s data. Provide a step-by-step explanation, justifying each calculation by referring directly to values in the table.",
+            "Make quick assumptions based on random values in the table without verifying their relevance. Avoid analyzing row or column headers and skip logical steps, relying instead on guesses about the relationships between numbers. Provide a final answer without explaining your reasoning or referring directly to specific values in the table."
+            ],
+            'visual':[self.default_system,
+                     "Examine the image carefully, identifying key objects, their relationships, and any relevant details, such as colors, sizes, positions, or context. Use these observations to answer the question precisely, basing each part of your response on what you can directly observe in the image. Explain the reasoning behind your answer, referring to specific elements in the image that support your interpretation.",
+                      "Provide a quick answer based on a superficial look at the image without carefully analyzing details or relationships between objects. Rely on assumptions about what might be in the image rather than accurately observing specific elements. Avoid explaining your answer or justifying it with details from the image."
+            ],
+        }
+        self.default_system = 0x7f7f7f7f
+        
     def _pre_forward_hook(self, module, args, kwargs):
         from .utils import to_device
         if '_data' in kwargs:
@@ -1237,11 +1265,56 @@ class RepeTemplate(Template):
         if 'response' in data[0]: # DEBUG : Temporary
             kwargs['response'] = data[0]['response']
         return args, kwargs
+
+    def preprocess(self, example):
+        # Duplicate example and create a new one to prepare in-place changes
+        example = example.copy()
+        template_type: Optional[str] = getattr(self, 'template_type', None)
+        tools: Union[List[Any], str] = example.get('tools') or []
+
+        # Template needs to be initialized
+        if not self._is_init:
+            raise ValueError(
+                'Template is not initialized, please use the `get_template` function to obtain the template.')
+
+        # Reset system (by default value and agent tools)
+        # system: Optional[str] = example.get('system', None)
+        # if system is None:
+        #     if self.use_default_system:
+        #         system = self.default_system
+        # elif system == '':
+        #     system = None
+        # else:
+        #     assert self.system_prefix is not None, (
+        #         f'The template does not support `system`, template_type: {template_type}')
+        # if tools:
+        #     if isinstance(tools, str):
+        #         tools = json.loads(tools)
+        #     if system is None:
+        #         system = ''
+        #     system += get_tools_prompt(tools, self.tools_prompt)
+
+        example['system'] = self.system_dict[example['system']][self.polarity]
+
+        # Check whether this template supports multi-round
+        history: History = example.get('history') or []
+        if len(history) > 0:
+            assert self.support_multi_round, (
+                f'The template does not support multi-round chat, template_type: {template_type}')
+
+        # Set history_roles
+        history_roles: Optional[History] = example.get('history_roles')
+        if history_roles is None:
+            example['history_roles'] = [['user', 'assistant'] for _ in range(len(history))]
+
+        self._preprocess_media(example)
+        return example
     
     def _encode(self, example: Dict[str, Any], streaming: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         # Qwen2VLTemplateMixin, InternLMXComposer2Template, LLavaOneVison returns 
         # inputs, {}
         response = example['response']
+
         example['response'] = ''
         inputs, _ = super()._encode(example)
         if '_data' not in inputs:
@@ -1651,7 +1724,7 @@ class RepeQwen2VLTemplate(RepeTemplate, _Qwen2VLTemplateMixin, QwenTemplate):
         temp_len = inputs_embeds.shape[1]
         if  temp_len> self.query_max_len:
             raise MaxLengthExceededError(
-                f"Input length {res['inputs_embeds'].shape[0]} exceeds the maximum allowed length of {self.query_max_len}."
+                f"Input length {temp_len} exceeds the maximum allowed length of {self.query_max_len}."
             )
         inputs['inputs_embeds'] = inputs_embeds
         # Extract current embeddings and im_mask
